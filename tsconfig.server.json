@@ -1,0 +1,20 @@
+{
+  "compilerOptions": {
+    "target": "ESNext",
+    "module": "CommonJS",
+    "moduleResolution": "Node",
+    "outDir": "./dist/server",
+    "rootDir": "./server",
+    "strict": false,
+    "esModuleInterop": true,
+    "skipLibCheck": true,
+    "forceConsistentCasingInFileNames": true,
+    "declaration": true,
+    "declarationMap": true,
+    "sourceMap": true,
+    "noEmit": false,
+    "resolveJsonModule": true
+  },
+  "include": ["server/**/*"],
+  "exclude": ["**/__tests__/*", "**/*.spec.ts"]
+}
