@@ -11,7 +11,6 @@
       @delete-connection="handleDelete"
       @refresh="handleRefresh"
       @toggle-sidebar="store.toggleSidebar()"
-      @open-local-shell="handleOpenLocalShell"
     />
 
     <!-- 主区域 -->
@@ -56,6 +55,9 @@
             <i class="bi bi-x"></i>
           </span>
         </div>
+        <button class="tab-add-btn" @click="handleOpenLocalShell" title="新建本地 Shell">
+          <i class="bi bi-plus"></i>
+        </button>
       </div>
 
       <!-- 终端内容区 -->
@@ -310,6 +312,27 @@ async function restoreOrCreateTabs() {
 
 .btn-toolbar:hover {
   background-color: rgba(255, 255, 255, 0.08);
+  color: var(--text-primary);
+}
+
+.tab-add-btn {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 28px;
+  height: 28px;
+  margin: auto 4px auto 2px;
+  background: none;
+  border: none;
+  border-radius: 4px;
+  color: var(--text-secondary);
+  cursor: pointer;
+  font-size: 16px;
+  flex-shrink: 0;
+}
+
+.tab-add-btn:hover {
+  background-color: rgba(255, 255, 255, 0.1);
   color: var(--text-primary);
 }
 </style>

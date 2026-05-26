@@ -128,6 +128,6 @@ defineExpose({
 </script>
 
 <style scoped>
-.modal-dialog { z-index: var(--bs-modal-zindex); max-width: none !important; }
+.modal-dialog { z-index: var(--bs-modal-zindex); }
 .modal-body { min-height: 80px; display: flex; flex-direction: column; align-items: stretch; }
 </style>

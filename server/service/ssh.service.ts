@@ -91,6 +91,9 @@ export class SSHService {
         const shell = connection.shell || this.getDefaultShell();
         const homeDir = os.homedir();
 
+        // 构建干净的 Shell 环境（过滤掉 Node.js / npm 相关变量，避免 nvm 等工具警告）
+        const cleanEnv = this.buildShellEnv(cols, rows);
+
         // 优先使用 node-pty（支持真正的 PTY，有回显、提示符、颜色等）
         if (nodePty) {
           try {
@@ -99,7 +102,7 @@ export class SSHService {
               cols,
               rows,
               cwd: homeDir,
-              env: { ...process.env, TERM: 'xterm-256color' },
+              env: cleanEnv,
             });
 
             const session: TerminalSession = {
@@ -126,7 +129,7 @@ export class SSHService {
         // 降级模式：使用 child_process.spawn（无 PTY，功能受限）
         const child = spawn(shell, [], {
           cwd: homeDir,
-          env: { ...process.env, TERM: 'xterm-256color', COLUMNS: String(cols), LINES: String(rows) },
+          env: cleanEnv,
           stdio: ['pipe', 'pipe', 'pipe'],
         });
 
@@ -215,6 +218,36 @@ export class SSHService {
       return process.env.COMSPEC || 'cmd.exe';
     }
     return process.env.SHELL || '/bin/sh';
+  }
+
+  /**
+   * 构建干净的 Shell 环境变量
+   * 过滤掉 Node.js / npm / pnpm 相关变量，避免子 shell 出现 nvm 等工具警告
+   */
+  private buildShellEnv(cols: number, rows: number): Record<string, string> {
+    const skipPrefixes = [
+      'npm_', 'NPM_', 'pnpm_', 'PNPM_',
+      'NODE_', 'node_',
+    ];
+    const skipExact = new Set([
+      'INIT_CWD', 'PWD',
+    ]);
+
+    const env: Record<string, string> = {};
+    for (const [key, value] of Object.entries(process.env)) {
+      if (value === undefined) continue;
+      if (skipExact.has(key)) continue;
+      if (skipPrefixes.some(p => key.startsWith(p))) continue;
+      env[key] = value;
+    }
+
+    // 设置终端必要变量
+    env.TERM = 'xterm-256color';
+    env.COLORTERM = 'truecolor';
+    env.COLUMNS = String(cols);
+    env.LINES = String(rows);
+
+    return env;
   }
 
   /**

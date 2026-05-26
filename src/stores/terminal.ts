@@ -160,21 +160,18 @@ export const useTerminalStore = defineStore('terminal', {
       return [];
     },
 
-    // 创建本地 Shell TAB（不保存到连接列表）
+    // 创建本地 Shell TAB（不保存到连接列表，每次新建）
     openLocalShell() {
       const LOCAL_SHELL_ID = '__local__';
-      // 检查是否已有本地 Shell TAB
-      const existing = this.tabs.find(t => t.connectionId === LOCAL_SHELL_ID);
-      if (existing) {
-        this.switchTab(existing.id);
-        return existing;
-      }
-      // 创建新的本地 Shell TAB
+      // 计算本地 Shell Tab 序号，用于显示名称
+      const localCount = this.tabs.filter(t => t.connectionId === LOCAL_SHELL_ID).length;
+      const tabName = localCount === 0 ? '本地 Shell' : `本地 Shell ${localCount + 1}`;
+
       const tabId = `tab-local-${Date.now()}-${Math.random().toString(36).substr(2, 6)}`;
       const tab: TerminalTab = {
         id: tabId,
         connectionId: LOCAL_SHELL_ID,
-        connectionName: '本地 Shell',
+        connectionName: tabName,
         status: 'connecting',
         cols: 80,
         rows: 24,

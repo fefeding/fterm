@@ -29,24 +29,6 @@
       >
     </div>
 
-    <!-- 本地 Shell 快捷入口 -->
-    <div class="p-2 border-bottom" style="border-color: var(--border-color) !important;">
-      <div
-        class="connection-item local-shell-item"
-        @click="$emit('open-local-shell')"
-      >
-        <i class="bi bi-terminal" style="color: var(--accent);"></i>
-        <div class="flex-grow-1">
-          <div style="font-size: 13px;">本地 Shell</div>
-        </div>
-        <div class="d-flex gap-1">
-          <button class="btn-conn" style="opacity: 1;" @click.stop="$emit('open-local-shell')" title="打开">
-            <i class="bi bi-play-fill"></i>
-          </button>
-        </div>
-      </div>
-    </div>
-
     <!-- 连接列表 -->
     <div class="flex-grow-1 overflow-auto">
       <div v-if="loading" class="text-center p-4" style="color: var(--text-secondary);">
@@ -113,7 +95,6 @@ defineEmits<{
   (e: 'delete-connection', conn: ConnectionEntity): void;
   (e: 'refresh'): void;
   (e: 'toggle-sidebar'): void;
-  (e: 'open-local-shell'): void;
 }>();
 
 const searchQuery = ref('');

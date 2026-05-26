@@ -179,35 +179,30 @@ const config = defineConfig({
                                         const sshSession = await sshService.createSession(sessionId, connectionId, cols || 80, rows || 24);
 
                                         // 根据会话类型设置数据接收
-                                        if (sshSession.type === 'local' && sshSession.childProcess) {
-                                            // 本地 shell：从 stdout 和 stderr 接收数据
-                                            sshSession.childProcess.stdout?.on('data', (chunk: Buffer) => {
-                                                if (ws.readyState === WebSocket.OPEN) {
-                                                    ws.send(JSON.stringify({ type: 'terminal', sessionId, data: chunk.toString('utf-8') }));
-                                                }
-                                            });
-                                            sshSession.childProcess.stderr?.on('data', (chunk: Buffer) => {
-                                                if (ws.readyState === WebSocket.OPEN) {
-                                                    ws.send(JSON.stringify({ type: 'terminal', sessionId, data: chunk.toString('utf-8') }));
-                                                }
-                                            });
-                                            sshSession.childProcess.on('exit', () => {
-                                                if (ws.readyState === WebSocket.OPEN) {
-                                                    ws.send(JSON.stringify({ type: 'close', sessionId }));
-                                                }
-                                            });
+                                        const sendOutput = (chunk: any) => {
+                                            if (ws.readyState === WebSocket.OPEN) {
+                                                ws.send(JSON.stringify({ type: 'terminal', sessionId, data: typeof chunk === 'string' ? chunk : chunk.toString('utf-8') }));
+                                            }
+                                        };
+                                        const sendClose = (source: string) => () => {
+                                            if (ws.readyState === WebSocket.OPEN) {
+                                                ws.send(JSON.stringify({ type: 'close', sessionId }));
+                                            }
+                                        };
+
+                                        if (sshSession.pty) {
+                                            // node-pty 模式
+                                            sshSession.pty.onData(sendOutput);
+                                            sshSession.pty.onExit(sendClose('Local PTY'));
+                                        } else if (sshSession.childProcess) {
+                                            // child_process 降级模式
+                                            sshSession.childProcess.stdout?.on('data', sendOutput);
+                                            sshSession.childProcess.stderr?.on('data', sendOutput);
+                                            sshSession.childProcess.on('exit', sendClose('Local shell'));
                                         } else if (sshSession.stream) {
-                                            // SSH：从 stream 接收数据
-                                            sshSession.stream.on('data', (chunk: Buffer) => {
-                                                if (ws.readyState === WebSocket.OPEN) {
-                                                    ws.send(JSON.stringify({ type: 'terminal', sessionId, data: chunk.toString('utf-8') }));
-                                                }
-                                            });
-                                            sshSession.stream.on('close', () => {
-                                                if (ws.readyState === WebSocket.OPEN) {
-                                                    ws.send(JSON.stringify({ type: 'close', sessionId }));
-                                                }
-                                            });
+                                            // SSH 模式
+                                            sshSession.stream.on('data', sendOutput);
+                                            sshSession.stream.on('close', sendClose('SSH stream'));
                                         }
 
                                         ws.send(JSON.stringify({ type: 'status', sessionId, data: 'connected' }));
