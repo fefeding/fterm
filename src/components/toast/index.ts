@@ -1,6 +1,7 @@
 import { createApp, getCurrentInstance } from 'vue';
 import BootstrapToast from './toast.vue';
 import { setGlobalToast } from '@/utils/toast';
+import i18n from '@/utils/i18n';
 
 export type ToastType = {
   show: (message: string, title: string, type: string, duration?: number) => void,
@@ -15,6 +16,7 @@ export default {
     const toastMount = document.createElement('div');
     document.body.appendChild(toastMount);
     const toastApp = createApp(BootstrapToast);
+    toastApp.use(i18n);
     const toastInstance = toastApp.mount(toastMount) as any;
 
     const toastMethods = {

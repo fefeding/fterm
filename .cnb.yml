@@ -1,14 +1,109 @@
-# 这里是一个示例 .cnb.yml
-  
-  # 匹配main分支
-  main:
-    # 触发事件为 push 事件
-    push:
-      # 这里是阶段任务示例，可配置任意多个阶段，这里以一个阶段为例
-      - name: "your first CNB building"
-        stages:
-          # 使用流水线输出你的构建配置数据
-          - name: echo your build data
-            script: echo ${CNB_BUILD_USER} 通过 ${CNB_BRANCH} 分支触发了 ${CNB_EVENT} 事件
-  
-  # 更多资料见 https://docs.cnb.cool/build/quick-start.html
+# CNB 云构建配置
+# 文档: https://docs.cnb.cool/zh/build/grammar.html
+
+# main 分支: 推送时构建
+main:
+  push:
+    - name: build-nw-client
+      docker:
+        image: node:20
+        # 缓存 pnpm store 和 nw-builder 缓存，加速后续构建
+        volumes:
+          - name: pnpm-store
+            path: /root/.local/share/pnpm/store/v3
+          - name: nw-cache
+            path: /build/nw-cache
+      env:
+        # 可配置国内镜像加速 NW.js 下载（可选）
+        # NWJS_DOWNLOAD_URL: https://npmmirror.com/mirrors/nwjs
+        # NWJS_MANIFEST_URL: https://npmmirror.com/mirrors/nwjs/versions.json
+        CI: 'true'
+      stages:
+        - name: install pnpm
+          script: npm i -g pnpm
+
+        - name: install dependencies
+          script: pnpm install --no-frozen-lockfile
+
+        - name: build application
+          script: pnpm run build
+
+        - name: prepare dist dependencies
+          script: |
+            cp package.json dist/package.json
+            cd dist && npm install --omit=dev --no-audit --no-fund
+
+        - name: build nw linux client
+          script: pnpm run nw:build -- --platform=linux
+
+        - name: package artifacts
+          script: |
+            mkdir -p artifacts
+            if [ -d "release/fterm-linux" ]; then
+              tar -czf artifacts/fterm-linux.tar.gz -C release/fterm-linux .
+            fi
+            echo "=== 构建产物 ==="
+            find release -type f \( -name "*.zip" -o -name "*.tar.gz" \) 2>/dev/null | head -20 || true
+            ls -la release/ 2>/dev/null || true
+            echo "=== artifacts ==="
+            ls -la artifacts/ 2>/dev/null || true
+
+      endStages:
+        - name: show build summary
+          script: |
+            echo "✅ 构建完成"
+            echo "分支: ${CNB_BRANCH}"
+            echo "提交: ${CNB_COMMIT}"
+            echo "构建产物目录: release/"
+            find release -maxdepth 2 -type d 2>/dev/null || true
+
+# tag 推送时构建（用于发布版本）
+$:
+  tag_push:
+    - name: build-nw-release
+      docker:
+        image: node:20
+        volumes:
+          - name: pnpm-store
+            path: /root/.local/share/pnpm/store/v3
+          - name: nw-cache
+            path: /build/nw-cache
+      env:
+        CI: 'true'
+      stages:
+        - name: install pnpm
+          script: npm i -g pnpm
+
+        - name: install dependencies
+          script: pnpm install --no-frozen-lockfile
+
+        - name: build application
+          script: pnpm run build
+
+        - name: prepare dist dependencies
+          script: |
+            cp package.json dist/package.json
+            cd dist && npm install --omit=dev --no-audit --no-fund
+
+        - name: build nw linux client
+          script: pnpm run nw:build -- --platform=linux
+
+        - name: package artifacts
+          script: |
+            mkdir -p artifacts
+            if [ -d "release/fterm-linux" ]; then
+              tar -czf artifacts/fterm-linux.tar.gz -C release/fterm-linux .
+            fi
+            echo "=== 构建产物 ==="
+            find release -type f \( -name "*.zip" -o -name "*.tar.gz" \) 2>/dev/null | head -20 || true
+            ls -la release/ 2>/dev/null || true
+            echo "=== artifacts ==="
+            ls -la artifacts/ 2>/dev/null || true
+
+      endStages:
+        - name: show release summary
+          script: |
+            echo "✅ 发布构建完成"
+            echo "标签: ${CNB_REF_NAME}"
+            echo "分支: ${CNB_BRANCH}"
+            echo "提交: ${CNB_COMMIT}"

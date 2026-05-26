@@ -22,14 +22,14 @@
                     <slot name="footer" v-if="$slots.footer"></slot>
                     <template v-else>
                         <button v-if="dynamicShowCancel || props.closeButton.show" type="button" class="btn btn-secondary" @click="cancel">
-                            {{ dynamicCancelText || props.closeButton.text }}
+                            {{ dynamicCancelText || props.closeButton.text || t('modal.close') }}
                         </button>
                         <button v-if="props.confirmButton.show" type="button" class="btn" :class="confirmButtonClass" @click="confirm">
-                            {{ dynamicConfirmText || props.confirmButton.text }}
+                            {{ dynamicConfirmText || props.confirmButton.text || t('modal.confirm') }}
                         </button>
                     </template>
                 </div>
-                <Loading :isLoading="props.isLoading" :message="props.loadingMessage"></Loading>
+                <Loading :isLoading="props.isLoading" :message="props.loadingMessage || t('modal.processing')"></Loading>
             </div>
         </div>
     </div>
@@ -39,15 +39,18 @@
 import { ref, onMounted, onUnmounted, watch, computed, nextTick } from 'vue';
 import * as bootstrap from 'bootstrap';
 import Loading from '@/components/loading/index.vue';
+import { useI18n } from 'vue-i18n';
+
+const { t } = useI18n();
 
 const modalId = `modal-${Date.now()}-${Math.floor(Math.random() * 1000)}`;
 
 const props = defineProps({
     title: { type: String, default: '' },
-    closeButton: { type: Object, default: { text: '关闭', show: false } },
-    confirmButton: { type: Object, default: { text: '确定', show: true } },
+    closeButton: { type: Object, default: () => ({ text: '', show: false }) },
+    confirmButton: { type: Object, default: () => ({ text: '', show: true }) },
     isLoading: { type: Boolean, default: false },
-    loadingMessage: { type: String, default: '处理中...' },
+    loadingMessage: { type: String, default: '' },
     visible: { type: Boolean, default: false },
     isFullScreen: { type: Boolean, default: false },
 });

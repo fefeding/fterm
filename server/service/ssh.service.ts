@@ -19,6 +19,7 @@ interface TerminalSession {
   id: string;
   connectionId: string;
   type: 'ssh' | 'local';
+  name: string;
   // SSH 特有
   client?: Client;
   stream?: ClientChannel;
@@ -29,12 +30,31 @@ interface TerminalSession {
   createdAt: Date;
 }
 
+/** Session 元数据（用于在 server 端持久化 tab 信息） */
+interface SessionMetadata {
+  sessionId: string;
+  connectionId: string;
+  type: 'ssh' | 'local';
+  name: string;
+  createdAt: Date;
+}
+
+/** 会话信息（用于返回给前端） */
+export interface SessionInfo {
+  sessionId: string;
+  connectionId: string;
+  type: 'ssh' | 'local';
+  name: string;
+  createdAt: Date;
+}
+
 /**
  * 终端会话管理服务
  * 支持 SSH 远程连接和本地 Shell
  */
 export class SSHService {
   private sessions: Map<string, TerminalSession> = new Map();
+  private sessionMetadata: Map<string, SessionMetadata> = new Map();
   private connectionService: ConnectionService;
 
   constructor(connectionService: ConnectionService) {
@@ -44,7 +64,7 @@ export class SSHService {
   /**
    * 创建会话（自动判断 SSH 或本地 shell）
    */
-  async createSession(sessionId: string, connectionId: string, cols: number = 80, rows: number = 24): Promise<TerminalSession> {
+  async createSession(sessionId: string, connectionId: string, cols: number = 80, rows: number = 24, name?: string): Promise<TerminalSession> {
     // 如果已存在同 ID 的会话，先关闭
     if (this.sessions.has(sessionId)) {
       this.closeSession(sessionId);
@@ -54,7 +74,7 @@ export class SSHService {
     if (connectionId === '__local__') {
       const localConn: ConnectionEntity = {
         id: '__local__',
-        name: '本地 Shell',
+        name: name || '本地 Shell',
         type: 'local',
         host: '',
         port: 22,
@@ -67,7 +87,16 @@ export class SSHService {
         createdAt: new Date(),
         updatedAt: new Date(),
       };
-      return this.createLocalSession(sessionId, connectionId, localConn, cols, rows);
+      const localSession = await this.createLocalSession(sessionId, connectionId, localConn, cols, rows, name);
+      // 保存 session 元数据到 server 端
+      this.sessionMetadata.set(sessionId, {
+        sessionId,
+        connectionId,
+        type: localSession.type,
+        name: localSession.name,
+        createdAt: localSession.createdAt,
+      });
+      return localSession;
     }
 
     const connection = await this.connectionService.getConnectionById(connectionId);
@@ -75,19 +104,32 @@ export class SSHService {
       throw new Error('连接配置不存在');
     }
 
+    let session: TerminalSession;
     if (connection.type === 'local') {
-      return this.createLocalSession(sessionId, connectionId, connection, cols, rows);
+      session = await this.createLocalSession(sessionId, connectionId, connection, cols, rows, name);
     } else {
-      return this.createSSHSession(sessionId, connectionId, connection, cols, rows);
+      session = await this.createSSHSession(sessionId, connectionId, connection, cols, rows, name);
     }
+
+    // 保存 session 元数据到 server 端
+    this.sessionMetadata.set(sessionId, {
+      sessionId,
+      connectionId,
+      type: session.type,
+      name: session.name,
+      createdAt: session.createdAt,
+    });
+
+    return session;
   }
 
   /**
    * 创建本地 Shell 会话（优先使用 node-pty，降级使用 child_process.spawn）
    */
-  private createLocalSession(sessionId: string, connectionId: string, connection: ConnectionEntity, cols: number, rows: number): Promise<TerminalSession> {
+  private createLocalSession(sessionId: string, connectionId: string, connection: ConnectionEntity, cols: number, rows: number, name?: string): Promise<TerminalSession> {
     return new Promise<TerminalSession>((resolve, reject) => {
       try {
+        const sessionName = name || connection.name || '本地 Shell';
         const shell = connection.shell || this.getDefaultShell();
         const homeDir = os.homedir();
 
@@ -109,6 +151,7 @@ export class SSHService {
               id: sessionId,
               connectionId,
               type: 'local',
+              name: sessionName,
               pty: ptyProcess,
               createdAt: new Date(),
             };
@@ -137,6 +180,7 @@ export class SSHService {
           id: sessionId,
           connectionId,
           type: 'local',
+          name: sessionName,
           childProcess: child,
           createdAt: new Date(),
         };
@@ -162,10 +206,11 @@ export class SSHService {
   /**
    * 创建 SSH 会话
    */
-  private createSSHSession(sessionId: string, connectionId: string, connection: ConnectionEntity, cols: number, rows: number): Promise<TerminalSession> {
+  private createSSHSession(sessionId: string, connectionId: string, connection: ConnectionEntity, cols: number, rows: number, name?: string): Promise<TerminalSession> {
     return new Promise<TerminalSession>((resolve, reject) => {
       const sshConfig = this.connectionService.getSSHConfig(connection);
       const client = new Client();
+      const sessionName = name || connection.name || 'SSH';
 
       const timeout = setTimeout(() => {
         client.end();
@@ -190,6 +235,7 @@ export class SSHService {
             id: sessionId,
             connectionId,
             type: 'ssh',
+            name: sessionName,
             client,
             stream,
             createdAt: new Date(),
@@ -248,6 +294,49 @@ export class SSHService {
     env.LINES = String(rows);
 
     return env;
+  }
+
+  /**
+   * 获取所有会话信息列表（从 sessionMetadata 读取）
+   */
+  getSessions(): SessionInfo[] {
+    const sessions: SessionInfo[] = [];
+    for (const [_, meta] of this.sessionMetadata) {
+      sessions.push({
+        sessionId: meta.sessionId,
+        connectionId: meta.connectionId,
+        type: meta.type,
+        name: meta.name,
+        createdAt: meta.createdAt,
+      });
+    }
+    return sessions;
+  }
+
+  /**
+   * 重命名会话
+   */
+  renameSession(sessionId: string, name: string): void {
+    // 更新内存中的 session 名称
+    const session = this.sessions.get(sessionId);
+    if (session) {
+      session.name = name;
+    }
+    // 更新元数据
+    const meta = this.sessionMetadata.get(sessionId);
+    if (meta) {
+      meta.name = name;
+    }
+  }
+
+  /**
+   * 删除会话（关闭进程并从 server 端移除 metadata）
+   */
+  deleteSession(sessionId: string): void {
+    // 先关闭进程
+    this.closeSession(sessionId);
+    // 再删除元数据
+    this.sessionMetadata.delete(sessionId);
   }
 
   /**

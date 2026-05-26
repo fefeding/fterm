@@ -57,10 +57,23 @@ export async function handleRoutes(pathname: string, body: any) {
 
     // 获取活跃会话列表
     if (pathname === '/api/terminal/getSessions') {
-      return {
-        count: sshService.getActiveSessionCount(),
-        sessions: sshService.getActiveSessionIds(),
-      };
+      return sshService.getSessions();
+    }
+
+    // 重命名会话
+    if (pathname === '/api/terminal/renameSession') {
+      const { sessionId, name } = body;
+      if (!sessionId) throw Error('Missing parameter: sessionId');
+      sshService.renameSession(sessionId, name);
+      return true;
+    }
+
+    // 删除会话（从 server 端移除 metadata）
+    if (pathname === '/api/terminal/deleteSession') {
+      const { sessionId } = body;
+      if (!sessionId) throw Error('Missing parameter: sessionId');
+      sshService.deleteSession(sessionId);
+      return true;
     }
 
     // 关闭指定会话

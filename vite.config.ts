@@ -169,14 +169,14 @@ const config = defineConfig({
                             const { type, sessionId: sid, data } = msg;
                             switch (type) {
                                 case 'create': {
-                                    const { connectionId, cols, rows } = data || {};
+                                    const { connectionId, cols, rows, name } = data || {};
                                     if (!connectionId) {
                                         ws.send(JSON.stringify({ type: 'error', data: 'Missing connectionId' }));
                                         return;
                                     }
                                     sessionId = sid || `ssh-${Date.now()}-${Math.random().toString(36).substr(2, 8)}`;
                                     try {
-                                        const sshSession = await sshService.createSession(sessionId, connectionId, cols || 80, rows || 24);
+                                        const sshSession = await sshService.createSession(sessionId, connectionId, cols || 80, rows || 24, name);
 
                                         // 根据会话类型设置数据接收
                                         const sendOutput = (chunk: any) => {
@@ -364,10 +364,19 @@ async function handleRoute(pathname: string, body: any) {
 
     // ========== 终端管理 ==========
     if (pathname === '/api/terminal/getSessions') {
-        return {
-            count: sshService.getActiveSessionCount(),
-            sessions: sshService.getActiveSessionIds(),
-        };
+        return sshService.getSessions();
+    }
+    if (pathname === '/api/terminal/renameSession') {
+        const { sessionId, name } = body;
+        if (!sessionId) throw new Error('Missing parameter: sessionId');
+        sshService.renameSession(sessionId, name);
+        return true;
+    }
+    if (pathname === '/api/terminal/deleteSession') {
+        const { sessionId } = body;
+        if (!sessionId) throw new Error('Missing parameter: sessionId');
+        sshService.deleteSession(sessionId);
+        return true;
     }
     if (pathname === '/api/terminal/closeSession') {
         const { sessionId } = body;

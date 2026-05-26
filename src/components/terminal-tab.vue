@@ -3,26 +3,29 @@
     <div class="terminal-container" ref="terminalContainer"></div>
     <div v-if="status === 'connecting'" class="terminal-status">
       <div class="spinner-border spinner-border-sm text-warning me-2"></div>
-      正在连接...
+      {{ t('tab.connecting') }}
     </div>
     <div v-if="status === 'error'" class="terminal-status text-danger">
       <i class="bi bi-exclamation-triangle me-2"></i>
-      连接失败: {{ errorMessage }}
+      {{ t('tab.connectionFailed') }}: {{ errorMessage }}
     </div>
     <div v-if="status === 'disconnected'" class="terminal-status text-secondary">
       <i class="bi bi-wifi-off me-2"></i>
-      连接已断开
+      {{ t('tab.disconnected') }}
     </div>
   </div>
 </template>
 
 <script lang="ts" setup>
 import { ref, onMounted, onBeforeUnmount, watch, nextTick } from 'vue';
+import { useI18n } from 'vue-i18n';
 import { Terminal } from '@xterm/xterm';
 import { FitAddon } from '@xterm/addon-fit';
 import { WebLinksAddon } from '@xterm/addon-web-links';
 import '@xterm/xterm/css/xterm.css';
 import type { ConnectionEntity, WSMessage } from '@/typings/connection';
+
+const { t } = useI18n();
 
 const props = defineProps<{
   tabId: string;
@@ -131,6 +134,7 @@ function connectWebSocket() {
         connectionId: props.connection.id,
         cols: terminal?.cols || 80,
         rows: terminal?.rows || 24,
+        name: props.connection.name,
       }
     });
   };
@@ -148,7 +152,7 @@ function connectWebSocket() {
 
   ws.onerror = (err) => {
     console.error('[TerminalTab] WebSocket error:', err);
-    setStatus('error', 'WebSocket 连接失败');
+    setStatus('error', t('tab.wsFailed'));
   };
 
   ws.onclose = (event) => {

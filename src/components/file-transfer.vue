@@ -1,8 +1,8 @@
 <template>
   <Modal
     ref="modalRef"
-    title="文件传输"
-    :closeButton="{ text: '关闭', show: true }"
+    :title="t('fileTransfer.title')"
+    :closeButton="{ text: t('common.close'), show: true }"
     :confirmButton="{ text: '', show: false }"
     :style="{ maxWidth: '500px', width: '100%' }"
     @onClose="handleClose"
@@ -15,14 +15,14 @@
           :class="mode === 'upload' ? 'btn-primary' : 'btn-outline-secondary'"
           @click="mode = 'upload'"
         >
-          <i class="bi bi-upload me-1"></i>上传文件 (rz)
+          <i class="bi bi-upload me-1"></i>{{ t('fileTransfer.upload') }}
         </button>
         <button
           class="btn flex-fill"
           :class="mode === 'download' ? 'btn-primary' : 'btn-outline-secondary'"
           @click="mode = 'download'"
         >
-          <i class="bi bi-download me-1"></i>下载文件 (sz)
+          <i class="bi bi-download me-1"></i>{{ t('fileTransfer.download') }}
         </button>
       </div>
 
@@ -37,9 +37,9 @@
           @click="triggerFileInput"
         >
           <i class="bi bi-cloud-upload" style="font-size: 32px;"></i>
-          <div class="mt-2">拖放文件到此处，或点击选择文件</div>
+          <div class="mt-2">{{ t('fileTransfer.dropZone') }}</div>
           <div class="mt-1" style="font-size: 12px; color: var(--text-secondary);">
-            支持多文件同时上传
+            {{ t('fileTransfer.multiFileSupport') }}
           </div>
         </div>
         <input
@@ -54,12 +54,12 @@
       <!-- 下载模式 -->
       <div v-if="mode === 'download'">
         <div class="mb-3">
-          <label class="form-label">远程文件路径</label>
+          <label class="form-label">{{ t('fileTransfer.remotePath') }}</label>
           <input
             type="text"
             class="form-control"
             v-model="remoteFilePath"
-            placeholder="/path/to/remote/file"
+            :placeholder="t('fileTransfer.remotePathPlaceholder')"
             style="background: #313244; border-color: #45475a; color: var(--text-primary);"
           >
         </div>
@@ -68,13 +68,13 @@
           :disabled="!remoteFilePath || transferring"
           @click="startDownload"
         >
-          <i class="bi bi-download me-1"></i>开始下载
+          <i class="bi bi-download me-1"></i>{{ t('fileTransfer.startDownload') }}
         </button>
       </div>
 
       <!-- 传输进度 -->
       <div v-if="transferring || transferHistory.length > 0" class="mt-3">
-        <div class="fw-bold mb-2" style="font-size: 13px;">传输记录</div>
+        <div class="fw-bold mb-2" style="font-size: 13px;">{{ t('fileTransfer.transferHistory') }}</div>
         <div class="transfer-list">
           <!-- 当前传输 -->
           <div v-if="currentProgress" class="transfer-item">
@@ -95,7 +95,7 @@
               ></div>
             </div>
             <div v-if="currentProgress.state === 'error'" class="text-danger" style="font-size: 12px;">
-              传输失败
+              {{ t('fileTransfer.transferFailed') }}
             </div>
           </div>
 
@@ -114,7 +114,7 @@
                 style="font-size: 12px;"
                 :class="item.state === 'complete' ? 'text-success' : 'text-danger'"
               >
-                {{ item.state === 'complete' ? '完成' : '失败' }}
+                {{ item.state === 'complete' ? t('fileTransfer.complete') : t('fileTransfer.failed') }}
               </span>
             </div>
           </div>
@@ -124,7 +124,7 @@
       <!-- 操作按钮 -->
       <div v-if="transferring" class="mt-3 text-center">
         <button class="btn btn-outline-danger btn-sm" @click="cancelTransfer">
-          <i class="bi bi-x-circle me-1"></i>取消传输
+          <i class="bi bi-x-circle me-1"></i>{{ t('fileTransfer.cancelTransfer') }}
         </button>
       </div>
     </div>
@@ -133,9 +133,12 @@
 
 <script lang="ts" setup>
 import { ref } from 'vue';
+import { useI18n } from 'vue-i18n';
 import Modal from '@/components/modal/index.vue';
 import { ZmodemSession, formatFileSize, type ZmodemProgress } from '@/utils/zmodem';
 import { toast } from '@/utils/toast';
+
+const { t } = useI18n();
 
 const modalRef = ref();
 const fileInput = ref<HTMLInputElement>();
@@ -190,7 +193,7 @@ function handleFileSelect(e: Event) {
 
 async function startUpload(files: File[]) {
   if (!activeTermRef) {
-    toast.error('终端未连接');
+    toast.error(t('fileTransfer.terminalNotConnected'));
     return;
   }
 
@@ -221,7 +224,7 @@ async function startUpload(files: File[]) {
       }
       currentProgress.value = null;
       transferring.value = false;
-      toast.success('文件上传完成');
+      toast.success(t('fileTransfer.uploadComplete'));
     })
     .onError((error) => {
       if (currentProgress.value) {
@@ -232,7 +235,7 @@ async function startUpload(files: File[]) {
       }
       currentProgress.value = null;
       transferring.value = false;
-      toast.error(error.message || '上传失败');
+      toast.error(error.message || t('fileTransfer.uploadFailed'));
     });
 
   await zmodemSession.startUpload(files);
@@ -240,7 +243,7 @@ async function startUpload(files: File[]) {
 
 function startDownload() {
   if (!remoteFilePath.value) {
-    toast.warning('请输入远程文件路径');
+    toast.warning(t('fileTransfer.remotePathRequired'));
     return;
   }
 
@@ -269,7 +272,7 @@ function startDownload() {
       }
       currentProgress.value = null;
       transferring.value = false;
-      toast.success('文件下载完成');
+      toast.success(t('fileTransfer.downloadComplete'));
     })
     .onError((error) => {
       if (currentProgress.value) {
@@ -280,7 +283,7 @@ function startDownload() {
       }
       currentProgress.value = null;
       transferring.value = false;
-      toast.error(error.message || '下载失败');
+      toast.error(error.message || t('fileTransfer.downloadFailed'));
     });
 
   zmodemSession.startDownload(fileName);

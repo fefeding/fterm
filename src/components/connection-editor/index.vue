@@ -1,8 +1,8 @@
 <template>
   <Modal 
     ref="connectionModal"
-    :title="editingConnection ? '编辑连接' : '新增连接'"
-    :closeButton="{ text: '取消', show: false }"
+    :title="editingConnection ? t('connection.editTitle') : t('connection.addTitle')"
+    :closeButton="{ text: t('common.cancel'), show: false }"
     :confirmButton="{ text: '', show: false }"
     :style="{ maxWidth: '700px', width: '100%' }"
     @onClose="handleModalClose"
@@ -10,55 +10,55 @@
     <form @submit.prevent="saveConnection" class="connection-form">
       <!-- 基本信息 -->
       <div class="mb-3">
-        <label class="form-label fw-bold"><i class="bi bi-tag me-1"></i>连接名称 <span class="text-danger">*</span></label>
-        <input type="text" class="form-control" v-model="form.name" placeholder="为连接起一个名称" required>
+        <label class="form-label fw-bold"><i class="bi bi-tag me-1"></i>{{ t('connection.name') }} <span class="text-danger">*</span></label>
+        <input type="text" class="form-control" v-model="form.name" :placeholder="t('connection.namePlaceholder')" required>
       </div>
 
       <!-- SSH 连接配置 -->
         <div class="row mb-3">
           <div class="col-8">
-            <label class="form-label fw-bold"><i class="bi bi-server me-1"></i>主机地址 <span class="text-danger">*</span></label>
-            <input type="text" class="form-control" v-model="form.host" placeholder="服务器 IP 或域名" :required="form.type === 'ssh'">
+            <label class="form-label fw-bold"><i class="bi bi-server me-1"></i>{{ t('connection.host') }} <span class="text-danger">*</span></label>
+            <input type="text" class="form-control" v-model="form.host" :placeholder="t('connection.hostPlaceholder')" :required="form.type === 'ssh'">
           </div>
           <div class="col-4">
-            <label class="form-label fw-bold"><i class="bi bi-door-closed me-1"></i>端口</label>
+            <label class="form-label fw-bold"><i class="bi bi-door-closed me-1"></i>{{ t('connection.port') }}</label>
             <input type="number" class="form-control" v-model.number="form.port" min="1" max="65535">
           </div>
         </div>
 
         <div class="mb-3">
-          <label class="form-label fw-bold"><i class="bi bi-person me-1"></i>用户名 <span class="text-danger">*</span></label>
-          <input type="text" class="form-control" v-model="form.username" placeholder="SSH 用户名" :required="form.type === 'ssh'">
+          <label class="form-label fw-bold"><i class="bi bi-person me-1"></i>{{ t('connection.username') }} <span class="text-danger">*</span></label>
+          <input type="text" class="form-control" v-model="form.username" :placeholder="t('connection.usernamePlaceholder')" :required="form.type === 'ssh'">
         </div>
 
         <!-- 认证方式 -->
         <div class="mb-3">
-          <label class="form-label fw-bold"><i class="bi bi-shield-lock me-1"></i>认证方式</label>
+          <label class="form-label fw-bold"><i class="bi bi-shield-lock me-1"></i>{{ t('connection.authType') }}</label>
           <div class="btn-group w-100" role="group">
             <input type="radio" class="btn-check" name="authType" id="auth-password" value="password" v-model="form.authType">
-            <label class="btn btn-outline-primary" for="auth-password"><i class="bi bi-key me-1"></i>密码</label>
+            <label class="btn btn-outline-primary" for="auth-password"><i class="bi bi-key me-1"></i>{{ t('connection.password') }}</label>
             <input type="radio" class="btn-check" name="authType" id="auth-key" value="privateKey" v-model="form.authType">
-            <label class="btn btn-outline-primary" for="auth-key"><i class="bi bi-file-earmark-lock me-1"></i>私钥</label>
+            <label class="btn btn-outline-primary" for="auth-key"><i class="bi bi-file-earmark-lock me-1"></i>{{ t('connection.privateKey') }}</label>
           </div>
         </div>
 
         <!-- 密码认证 -->
         <div v-if="form.authType === 'password'" class="mb-3">
-          <label class="form-label fw-bold">密码</label>
-          <input type="password" class="form-control" v-model="form.password" placeholder="SSH 密码">
+          <label class="form-label fw-bold">{{ t('connection.passwordLabel') }}</label>
+          <input type="password" class="form-control" v-model="form.password" :placeholder="t('connection.passwordPlaceholder')">
         </div>
 
         <!-- 私钥认证 -->
         <div v-if="form.authType === 'privateKey'" class="mb-3">
-          <label class="form-label fw-bold">私钥内容</label>
-          <textarea class="form-control" v-model="form.privateKey" rows="5" placeholder="粘贴私钥内容或选择文件..."></textarea>
+          <label class="form-label fw-bold">{{ t('connection.privateKeyContent') }}</label>
+          <textarea class="form-control" v-model="form.privateKey" rows="5" :placeholder="t('connection.privateKeyPlaceholder')"></textarea>
           <div class="mt-2">
-            <label class="form-label">私钥密码（可选）</label>
-            <input type="password" class="form-control" v-model="form.passphrase" placeholder="如果私钥有密码保护">
+            <label class="form-label">{{ t('connection.passphrase') }}</label>
+            <input type="password" class="form-control" v-model="form.passphrase" :placeholder="t('connection.passphrasePlaceholder')">
           </div>
           <div class="mt-2">
             <button type="button" class="btn btn-sm btn-outline-secondary" @click="loadPrivateKey">
-              <i class="bi bi-folder-open me-1"></i>从文件加载
+              <i class="bi bi-folder-open me-1"></i>{{ t('connection.loadFromFile') }}
             </button>
           </div>
         </div>
@@ -66,34 +66,34 @@
       <!-- 终端配置 -->
       <div class="card mb-3">
         <div class="card-header" @click="showTerminalConfig = !showTerminalConfig" style="cursor: pointer;">
-          <i class="bi bi-terminal me-1"></i>终端配置
+          <i class="bi bi-terminal me-1"></i>{{ t('connection.terminalConfig') }}
           <i :class="showTerminalConfig ? 'bi bi-chevron-up float-end' : 'bi bi-chevron-down float-end'"></i>
         </div>
         <div class="card-body" v-show="showTerminalConfig">
           <div class="row mb-2">
             <div class="col-6">
-              <label class="form-label">字体大小</label>
+              <label class="form-label">{{ t('connection.fontSize') }}</label>
               <input type="number" class="form-control form-control-sm" v-model.number="form.terminal.fontSize" min="8" max="32">
             </div>
             <div class="col-6">
-              <label class="form-label">光标样式</label>
+              <label class="form-label">{{ t('connection.cursorStyle') }}</label>
               <select class="form-select form-select-sm" v-model="form.terminal.cursorStyle">
-                <option value="block">方块</option>
-                <option value="underline">下划线</option>
-                <option value="bar">竖线</option>
+                <option value="block">{{ t('connection.cursorBlock') }}</option>
+                <option value="underline">{{ t('connection.cursorUnderline') }}</option>
+                <option value="bar">{{ t('connection.cursorBar') }}</option>
               </select>
             </div>
           </div>
           <div class="row mb-2">
             <div class="col-6">
-              <label class="form-label">主题</label>
+              <label class="form-label">{{ t('connection.theme') }}</label>
               <select class="form-select form-select-sm" v-model="form.terminal.theme">
-                <option value="dark">暗色</option>
-                <option value="light">亮色</option>
+                <option value="dark">{{ t('connection.themeDark') }}</option>
+                <option value="light">{{ t('connection.themeLight') }}</option>
               </select>
             </div>
             <div class="col-6">
-              <label class="form-label">字体</label>
+              <label class="form-label">{{ t('connection.fontFamily') }}</label>
               <input type="text" class="form-control form-control-sm" v-model="form.terminal.fontFamily" placeholder="字体">
             </div>
           </div>
@@ -105,13 +105,13 @@
         <button type="button" class="btn btn-outline-secondary" @click="testConn" :disabled="testing">
           <span v-if="testing" class="spinner-border spinner-border-sm me-1"></span>
           <i v-else class="bi bi-plug me-1"></i>
-          {{ testing ? '测试中...' : '测试连接' }}
+          {{ testing ? t('connection.testing') : t('connection.testConnection') }}
         </button>
         <div>
-          <button type="button" class="btn btn-secondary me-2" @click="close">取消</button>
+          <button type="button" class="btn btn-secondary me-2" @click="close">{{ t('common.cancel') }}</button>
           <button type="submit" class="btn btn-primary" :disabled="saving">
             <span v-if="saving" class="spinner-border spinner-border-sm me-1"></span>
-            {{ saving ? '保存中...' : '保存' }}
+            {{ saving ? t('connection.saving') : t('common.save') }}
           </button>
         </div>
       </div>
@@ -121,9 +121,12 @@
 
 <script lang="ts" setup>
 import { ref, reactive } from 'vue';
+import { useI18n } from 'vue-i18n';
 import Modal from '@/components/modal/index.vue';
 import { ConnectionService } from '@/service/connection';
 import { toast } from '@/utils/toast';
+
+const { t } = useI18n();
 
 const connectionModal = ref();
 const editingConnection = ref<string | null>(null);
@@ -176,11 +179,11 @@ function handleModalClose() {
 
 async function saveConnection() {
   if (!form.name) {
-    toast.warning('请填写连接名称');
+    toast.warning(t('connection.nameRequired'));
     return;
   }
   if (!form.host || !form.username) {
-    toast.warning('请填写主机地址和用户名');
+    toast.warning(t('connection.hostUsernameRequired'));
     return;
   }
   saving.value = true;
@@ -190,11 +193,11 @@ async function saveConnection() {
     } else {
       await connectionService.addConnection({ ...form } as any);
     }
-    toast.success('保存成功');
+    toast.success(t('connection.saveSuccess'));
     close();
     emit('saved');
   } catch (e: any) {
-    toast.error(e.message || '保存失败');
+    toast.error(e.message || t('connection.saveFailed'));
   } finally {
     saving.value = false;
   }
@@ -202,16 +205,16 @@ async function saveConnection() {
 
 async function testConn() {
   if (!form.host || !form.username) {
-    toast.warning('请先填写主机和用户名');
+    toast.warning(t('connection.hostUsernameTestRequired'));
     return;
   }
   testing.value = true;
   try {
     const result = await connectionService.testConnection({ ...form } as any);
-    if (result) toast.success('连接成功');
-    else toast.error('连接失败');
+    if (result) toast.success(t('connection.testSuccess'));
+    else toast.error(t('connection.testFailed'));
   } catch (e: any) {
-    toast.error(e.message || '测试失败');
+    toast.error(e.message || t('connection.testError'));
   } finally {
     testing.value = false;
   }
@@ -228,9 +231,9 @@ async function loadPrivateKey() {
       try {
         const text = await (chooser.files[0] as File).text();
         form.privateKey = text;
-        toast.success('私钥已加载');
+        toast.success(t('connection.privateKeyLoaded'));
       } catch (e: any) {
-        toast.error(e.message || '读取私钥文件失败');
+        toast.error(e.message || t('connection.privateKeyLoadFailed'));
       }
     }
   });

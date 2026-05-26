@@ -1,5 +1,8 @@
 import { createApp, getCurrentInstance, nextTick } from 'vue';
 import BootstrapModal from './index.vue';
+import i18n from '@/utils/i18n';
+
+const t = (key: string) => i18n.global.t(key);
 
 export type ModalType = { show: () => void; hide: () => void; open: () => void; close: () => void; };
 
@@ -29,6 +32,7 @@ export default {
     const mount = document.createElement('div');
     document.body.appendChild(mount);
     const modalApp = createApp(BootstrapModal);
+    modalApp.use(i18n);
     globalModalInstance = modalApp.mount(mount) as any;
 
     app.config.globalProperties.$modal = modalInstance = {
@@ -64,7 +68,7 @@ export const showModal = (options: ModalOptions): Promise<boolean> => {
   if (!globalModalInstance) return Promise.resolve(false);
   return new Promise<boolean>((resolve) => {
     const finalOptions = {
-      title: '提示', confirmText: '确定', cancelText: '取消', showCancel: false, type: 'info', ...options,
+      title: t('toast.info'), confirmText: t('common.confirm'), cancelText: t('common.cancel'), showCancel: false, type: 'info', ...options,
       onConfirm: () => { options.onConfirm?.(); globalModalInstance.hide(); nextTick(() => resolve(true)); },
       onCancel: () => { options.onCancel?.(); globalModalInstance.hide(); nextTick(() => resolve(false)); }
     };
@@ -78,5 +82,5 @@ export const showAlert = (content: string, type: 'success' | 'error' | 'warning'
 };
 
 export const showConfirm = (content: string, options?: Omit<ModalOptions, 'content' | 'showCancel'>) => {
-  return showModal({ title: '确认', content, type: 'warning', showCancel: true, ...options });
+  return showModal({ title: t('common.confirm'), content, type: 'warning', showCancel: true, ...options });
 };

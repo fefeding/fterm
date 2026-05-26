@@ -1,6 +1,5 @@
-const nwbuilder = require('nw-builder');
 const { resolve, join } = require('path');
-const { copyFileSync, existsSync, readdirSync } = require('fs');
+const { copyFileSync, readFileSync, existsSync, mkdirSync } = require('fs');
 
 const projectRoot = resolve(__dirname, '..');
 
@@ -12,7 +11,7 @@ function getCurrentPlatform() {
   const platform = process.platform;
   if (platform === 'darwin') return ['osx'];
   if (platform === 'linux') return ['linux'];
-  return ['win', 'linux'];
+  return ['win'];
 }
 
 function getAppConfig(platform) {
@@ -32,26 +31,48 @@ function getAppConfig(platform) {
   return config;
 }
 
+function getNwVersion() {
+  try {
+    const pkg = JSON.parse(readFileSync(join(projectRoot, 'package.json'), 'utf-8'));
+    const nwVersion = pkg.devDependencies?.nw;
+    if (nwVersion) {
+      return nwVersion.replace(/^\^/, '');
+    }
+  } catch (e) {
+    console.warn('无法读取 NW.js 版本，使用 latest');
+  }
+  return 'latest';
+}
+
 async function buildPlatform(platform) {
   const outDir = resolve(projectRoot, `release/fterm-${platform}`);
   console.log(`\n========================================`);
   console.log(`构建 ${platform} 平台...`);
   console.log(`========================================`);
 
-  await nwbuilder.default({
+  // nw-builder v4 为 ESM 模块，需动态导入
+  const { nwbuild } = await import('nw-builder');
+
+  const nwVersion = getNwVersion();
+  console.log(`使用 NW.js 版本: ${nwVersion}`);
+
+  await nwbuild({
     mode: 'build',
     srcDir: resolve(projectRoot, 'dist'),
-    version: '0.78.1',
+    version: nwVersion,
     flavor: 'normal',
     platform,
     arch: 'x64',
     outDir,
     cacheDir: resolve(projectRoot, 'nw-cache'),
-    downloadUrl: 'https://github.com/nwjs/nw.js/releases/download/v0.78.1',
-    zip: false,
-    logLevel: 'info',
     glob: false,
-    app: getAppConfig(platform)
+    logLevel: 'info',
+    app: getAppConfig(platform),
+    zip: true,
+    // 支持通过环境变量配置下载镜像（如云构建环境）
+    downloadUrl: process.env.NWJS_DOWNLOAD_URL || 'https://dl.nwjs.io',
+    manifestUrl: process.env.NWJS_MANIFEST_URL || 'https://nwjs.io/versions.json',
+    shaSum: process.env.NWJS_SKIP_SHA !== 'true',
   });
 
   console.log(`✅ ${platform} 构建完成 -> ${outDir}`);
@@ -61,15 +82,22 @@ async function build() {
   try {
     console.log('构建 fterm NW.js 应用...\n');
 
-    console.log('1. 构建 Vue 应用...');
     const { execSync } = require('child_process');
+
+    console.log('1. 构建 Vue 应用 + 服务端...');
     execSync('npm run build', { stdio: 'inherit', cwd: projectRoot });
 
     console.log('\n2. 复制 package.json 到 dist...');
     copyFileSync(join(projectRoot, 'package.json'), join(projectRoot, 'dist', 'package.json'));
 
     console.log('\n3. 安装生产依赖到 dist...');
-    execSync('pnpm install --only=production', { stdio: 'inherit', cwd: resolve(projectRoot, 'dist') });
+    // 优先使用 pnpm，回退到 npm
+    try {
+      execSync('pnpm install --prod --no-audit --no-fund', { stdio: 'inherit', cwd: resolve(projectRoot, 'dist') });
+    } catch (e) {
+      console.log('pnpm install 失败，尝试 npm install...');
+      execSync('npm install --omit=dev --no-audit --no-fund', { stdio: 'inherit', cwd: resolve(projectRoot, 'dist') });
+    }
 
     let platformsToBuild = [];
     if (targetPlatform) {

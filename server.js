@@ -120,7 +120,7 @@ wss.on('connection', async (ws, req) => {
       switch (type) {
         case 'create': {
           // 创建新的 SSH 会话
-          const { connectionId, cols, rows } = data || {};
+          const { connectionId, cols, rows, name } = data || {};
           if (!connectionId) {
             ws.send(JSON.stringify({ type: 'error', data: '缺少 connectionId' }));
             return;
@@ -130,7 +130,7 @@ wss.on('connection', async (ws, req) => {
           console.log(`[WS] Creating SSH session: ${sessionId}, connectionId: ${connectionId}`);
 
           try {
-            const session = await sshService.createSession(sessionId, connectionId, cols || 80, rows || 24);
+            const session = await sshService.createSession(sessionId, connectionId, cols || 80, rows || 24, name);
             console.log(`[WS] SSH session created: ${sessionId}`);
 
             // 根据会话类型绑定输出和关闭事件

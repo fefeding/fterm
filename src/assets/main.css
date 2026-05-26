@@ -119,8 +119,9 @@ body {
   border-right: 1px solid var(--border-color);
   font-size: 13px;
   color: var(--text-secondary);
-  min-width: 100px;
+  min-width: 120px;
   max-width: 200px;
+  flex-shrink: 0;
   transition: background 0.15s;
 }
 
