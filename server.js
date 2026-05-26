@@ -133,23 +133,33 @@ wss.on('connection', async (ws, req) => {
             const session = await sshService.createSession(sessionId, connectionId, cols || 80, rows || 24);
             console.log(`[WS] SSH session created: ${sessionId}`);
 
-            // 将 SSH 输出转发到 WebSocket
-            session.stream.on('data', (chunk) => {
+            // 根据会话类型绑定输出和关闭事件
+            const sendOutput = (chunk) => {
               if (ws.readyState === WebSocket.OPEN) {
-                ws.send(JSON.stringify({
-                  type: 'terminal',
-                  sessionId,
-                  data: chunk.toString('utf-8'),
-                }));
+                ws.send(JSON.stringify({ type: 'terminal', sessionId, data: typeof chunk === 'string' ? chunk : chunk.toString('utf-8') }));
               }
-            });
-
-            session.stream.on('close', () => {
-              console.log(`[WS] SSH stream closed: ${sessionId}`);
+            };
+            const sendClose = (source) => () => {
+              console.log(`[WS] ${source} closed: ${sessionId}`);
               if (ws.readyState === WebSocket.OPEN) {
                 ws.send(JSON.stringify({ type: 'close', sessionId }));
               }
-            });
+            };
+
+            if (session.pty) {
+              // node-pty 模式
+              session.pty.onData(sendOutput);
+              session.pty.onExit(sendClose('Local PTY'));
+            } else if (session.childProcess) {
+              // child_process 降级模式
+              session.childProcess.stdout.on('data', sendOutput);
+              session.childProcess.stderr.on('data', sendOutput);
+              session.childProcess.on('close', sendClose('Local shell'));
+            } else if (session.stream) {
+              // SSH 模式
+              session.stream.on('data', sendOutput);
+              session.stream.on('close', sendClose('SSH stream'));
+            }
 
             ws.send(JSON.stringify({ type: 'status', sessionId, data: 'connected' }));
             console.log(`[WS] Session ${sessionId} connected, status sent`);

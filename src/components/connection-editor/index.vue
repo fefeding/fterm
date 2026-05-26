@@ -1,8 +1,8 @@
 <template>
   <Modal 
     ref="connectionModal"
-    :title="editingConnection ? '编辑 SSH 连接' : '新增 SSH 连接'"
-    :closeButton="{ text: '取消', show: true }"
+    :title="editingConnection ? '编辑连接' : '新增连接'"
+    :closeButton="{ text: '取消', show: false }"
     :confirmButton="{ text: '', show: false }"
     :style="{ maxWidth: '700px', width: '100%' }"
     @onClose="handleModalClose"
@@ -14,54 +14,54 @@
         <input type="text" class="form-control" v-model="form.name" placeholder="为连接起一个名称" required>
       </div>
 
-      <!-- 连接配置 -->
-      <div class="row mb-3">
-        <div class="col-8">
-          <label class="form-label fw-bold"><i class="bi bi-server me-1"></i>主机地址 <span class="text-danger">*</span></label>
-          <input type="text" class="form-control" v-model="form.host" placeholder="服务器 IP 或域名" required>
+      <!-- SSH 连接配置 -->
+        <div class="row mb-3">
+          <div class="col-8">
+            <label class="form-label fw-bold"><i class="bi bi-server me-1"></i>主机地址 <span class="text-danger">*</span></label>
+            <input type="text" class="form-control" v-model="form.host" placeholder="服务器 IP 或域名" :required="form.type === 'ssh'">
+          </div>
+          <div class="col-4">
+            <label class="form-label fw-bold"><i class="bi bi-door-closed me-1"></i>端口</label>
+            <input type="number" class="form-control" v-model.number="form.port" min="1" max="65535">
+          </div>
         </div>
-        <div class="col-4">
-          <label class="form-label fw-bold"><i class="bi bi-door-closed me-1"></i>端口</label>
-          <input type="number" class="form-control" v-model.number="form.port" min="1" max="65535">
-        </div>
-      </div>
 
-      <div class="mb-3">
-        <label class="form-label fw-bold"><i class="bi bi-person me-1"></i>用户名 <span class="text-danger">*</span></label>
-        <input type="text" class="form-control" v-model="form.username" placeholder="SSH 用户名" required>
-      </div>
-
-      <!-- 认证方式 -->
-      <div class="mb-3">
-        <label class="form-label fw-bold"><i class="bi bi-shield-lock me-1"></i>认证方式</label>
-        <div class="btn-group w-100" role="group">
-          <input type="radio" class="btn-check" name="authType" id="auth-password" value="password" v-model="form.authType">
-          <label class="btn btn-outline-primary" for="auth-password"><i class="bi bi-key me-1"></i>密码</label>
-          <input type="radio" class="btn-check" name="authType" id="auth-key" value="privateKey" v-model="form.authType">
-          <label class="btn btn-outline-primary" for="auth-key"><i class="bi bi-file-earmark-lock me-1"></i>私钥</label>
+        <div class="mb-3">
+          <label class="form-label fw-bold"><i class="bi bi-person me-1"></i>用户名 <span class="text-danger">*</span></label>
+          <input type="text" class="form-control" v-model="form.username" placeholder="SSH 用户名" :required="form.type === 'ssh'">
         </div>
-      </div>
 
-      <!-- 密码认证 -->
-      <div v-if="form.authType === 'password'" class="mb-3">
-        <label class="form-label fw-bold">密码</label>
-        <input type="password" class="form-control" v-model="form.password" placeholder="SSH 密码">
-      </div>
+        <!-- 认证方式 -->
+        <div class="mb-3">
+          <label class="form-label fw-bold"><i class="bi bi-shield-lock me-1"></i>认证方式</label>
+          <div class="btn-group w-100" role="group">
+            <input type="radio" class="btn-check" name="authType" id="auth-password" value="password" v-model="form.authType">
+            <label class="btn btn-outline-primary" for="auth-password"><i class="bi bi-key me-1"></i>密码</label>
+            <input type="radio" class="btn-check" name="authType" id="auth-key" value="privateKey" v-model="form.authType">
+            <label class="btn btn-outline-primary" for="auth-key"><i class="bi bi-file-earmark-lock me-1"></i>私钥</label>
+          </div>
+        </div>
 
-      <!-- 私钥认证 -->
-      <div v-if="form.authType === 'privateKey'" class="mb-3">
-        <label class="form-label fw-bold">私钥内容</label>
-        <textarea class="form-control" v-model="form.privateKey" rows="5" placeholder="粘贴私钥内容或选择文件..."></textarea>
-        <div class="mt-2">
-          <label class="form-label">私钥密码（可选）</label>
-          <input type="password" class="form-control" v-model="form.passphrase" placeholder="如果私钥有密码保护">
+        <!-- 密码认证 -->
+        <div v-if="form.authType === 'password'" class="mb-3">
+          <label class="form-label fw-bold">密码</label>
+          <input type="password" class="form-control" v-model="form.password" placeholder="SSH 密码">
         </div>
-        <div class="mt-2">
-          <button type="button" class="btn btn-sm btn-outline-secondary" @click="loadPrivateKey">
-            <i class="bi bi-folder-open me-1"></i>从文件加载
-          </button>
+
+        <!-- 私钥认证 -->
+        <div v-if="form.authType === 'privateKey'" class="mb-3">
+          <label class="form-label fw-bold">私钥内容</label>
+          <textarea class="form-control" v-model="form.privateKey" rows="5" placeholder="粘贴私钥内容或选择文件..."></textarea>
+          <div class="mt-2">
+            <label class="form-label">私钥密码（可选）</label>
+            <input type="password" class="form-control" v-model="form.passphrase" placeholder="如果私钥有密码保护">
+          </div>
+          <div class="mt-2">
+            <button type="button" class="btn btn-sm btn-outline-secondary" @click="loadPrivateKey">
+              <i class="bi bi-folder-open me-1"></i>从文件加载
+            </button>
+          </div>
         </div>
-      </div>
 
       <!-- 终端配置 -->
       <div class="card mb-3">
@@ -133,6 +133,7 @@ const saving = ref(false);
 
 const defaultForm = () => ({
   name: '',
+  type: 'ssh' as 'ssh',
   host: '',
   port: 22,
   username: 'root',
@@ -174,8 +175,12 @@ function handleModalClose() {
 }
 
 async function saveConnection() {
-  if (!form.name || !form.host || !form.username) {
-    toast.warning('请填写必填字段');
+  if (!form.name) {
+    toast.warning('请填写连接名称');
+    return;
+  }
+  if (!form.host || !form.username) {
+    toast.warning('请填写主机地址和用户名');
     return;
   }
   saving.value = true;

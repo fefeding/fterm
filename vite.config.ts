@@ -10,7 +10,16 @@ import ViteNunjucksPlugin from '@fefeding/vite-nunjucks-plugin';
 import * as path from 'path';
 import * as fs from 'fs';
 
+// 直接导入服务端代码（开发模式不再依赖编译产物）
+import { ConnectionService } from './server/service/connection.service';
+import { SSHService } from './server/service/ssh.service';
+
 const urlPrefix = process.env.PREFIX ? `/${process.env.PREFIX}` : '';
+
+// 创建共享服务实例（开发模式）
+const connectionService = new ConnectionService();
+connectionService.init();
+const sshService = new SSHService(connectionService);
 
 const defaultInitState = {
     "config": {"prefix": urlPrefix, "apiUrl": process.env.API_URL||""},
@@ -88,7 +97,11 @@ const config = defineConfig({
                     server.middlewares.use(async (req: http.IncomingMessage, res: http.ServerResponse, next: Connect.NextFunction) => {
                         const requestUrl = req.url || '';
                         if (requestUrl.startsWith('/api/') || requestUrl.startsWith('/ws/')) return next();
-                        if (requestUrl !== '/index.html' && /\.[a-zA-Z0-9]{1,4}$/.test(requestUrl) || requestUrl.includes('@vite/client')) return next();
+                        if (requestUrl.startsWith('/@vite/') || requestUrl.startsWith('/__vite_')) return next();
+                        if (req.headers.upgrade === 'websocket') return next();
+                        if (requestUrl !== '/index.html' && (/\.[a-zA-Z0-9]{1,4}(\?.*)?$/.test(requestUrl) || requestUrl.includes('@vite/client'))) return next();
+                        const accept = req.headers.accept || '';
+                        if (!accept.includes('text/html')) return next();
                         try {
                             const indexPath = path.resolve(viewDir, 'index.html');
                             if (!fs.existsSync(indexPath)) return next();
@@ -122,24 +135,23 @@ const config = defineConfig({
         {
             name: 'server-ws',
             async configureServer(server) {
-                // 开发模式下在 Vite HTTP server 上直接启动 WebSocket
                 try {
-                    const serverPath = path.resolve(__dirname, 'dist/server/index.js');
-                    if (!fs.existsSync(serverPath)) {
-                        console.warn('[WS] dist/server/index.js not found, WebSocket will not be available');
-                        console.warn('[WS] Run `pnpm run build-only` first');
-                        return;
-                    }
-                    const serverModule = await import(serverPath);
-                    const { sshService } = serverModule;
-                    if (!sshService) {
-                        console.warn('[WS] sshService not found in server module');
-                        return;
-                    }
+                    console.log('[WS] SSH service initialized from source');
 
                     const WebSocket = require('ws');
-                    const wss = new WebSocket.Server({ server: server.httpServer, path: '/ws/terminal' });
-                    console.log('[WS] WebSocket server attached to Vite dev server at /ws/terminal');
+                    // 使用 noServer: true 避免和 Vite 的 HMR WebSocket 冲突
+                    const wss = new WebSocket.Server({ noServer: true });
+                    console.log('[WS] WebSocket server (noServer) ready for /ws/terminal');
+
+                    // 手动处理 upgrade，只拦截 /ws/terminal 路径
+                    server.httpServer.on('upgrade', (req, socket, head) => {
+                        if (req.url === '/ws/terminal') {
+                            wss.handleUpgrade(req, socket, head, (ws) => {
+                                wss.emit('connection', ws, req);
+                            });
+                        }
+                        // 其他 WebSocket 请求（如 Vite HMR）不处理，自动放行
+                    });
 
                     wss.on('connection', async (ws: any) => {
                         console.log('[WS] Client connected to Vite dev WebSocket');
@@ -165,19 +177,42 @@ const config = defineConfig({
                                     sessionId = sid || `ssh-${Date.now()}-${Math.random().toString(36).substr(2, 8)}`;
                                     try {
                                         const sshSession = await sshService.createSession(sessionId, connectionId, cols || 80, rows || 24);
-                                        sshSession.stream.on('data', (chunk: Buffer) => {
-                                            if (ws.readyState === WebSocket.OPEN) {
-                                                ws.send(JSON.stringify({ type: 'terminal', sessionId, data: chunk.toString('utf-8') }));
-                                            }
-                                        });
-                                        sshSession.stream.on('close', () => {
-                                            if (ws.readyState === WebSocket.OPEN) {
-                                                ws.send(JSON.stringify({ type: 'close', sessionId }));
-                                            }
-                                        });
+
+                                        // 根据会话类型设置数据接收
+                                        if (sshSession.type === 'local' && sshSession.childProcess) {
+                                            // 本地 shell：从 stdout 和 stderr 接收数据
+                                            sshSession.childProcess.stdout?.on('data', (chunk: Buffer) => {
+                                                if (ws.readyState === WebSocket.OPEN) {
+                                                    ws.send(JSON.stringify({ type: 'terminal', sessionId, data: chunk.toString('utf-8') }));
+                                                }
+                                            });
+                                            sshSession.childProcess.stderr?.on('data', (chunk: Buffer) => {
+                                                if (ws.readyState === WebSocket.OPEN) {
+                                                    ws.send(JSON.stringify({ type: 'terminal', sessionId, data: chunk.toString('utf-8') }));
+                                                }
+                                            });
+                                            sshSession.childProcess.on('exit', () => {
+                                                if (ws.readyState === WebSocket.OPEN) {
+                                                    ws.send(JSON.stringify({ type: 'close', sessionId }));
+                                                }
+                                            });
+                                        } else if (sshSession.stream) {
+                                            // SSH：从 stream 接收数据
+                                            sshSession.stream.on('data', (chunk: Buffer) => {
+                                                if (ws.readyState === WebSocket.OPEN) {
+                                                    ws.send(JSON.stringify({ type: 'terminal', sessionId, data: chunk.toString('utf-8') }));
+                                                }
+                                            });
+                                            sshSession.stream.on('close', () => {
+                                                if (ws.readyState === WebSocket.OPEN) {
+                                                    ws.send(JSON.stringify({ type: 'close', sessionId }));
+                                                }
+                                            });
+                                        }
+
                                         ws.send(JSON.stringify({ type: 'status', sessionId, data: 'connected' }));
                                     } catch (err: any) {
-                                        ws.send(JSON.stringify({ type: 'error', sessionId, data: err.message || 'SSH connection failed' }));
+                                        ws.send(JSON.stringify({ type: 'error', sessionId, data: err.message || '连接失败' }));
                                     }
                                     break;
                                 }
@@ -273,8 +308,7 @@ async function serverRoute(req: Connect.IncomingMessage, res: http.ServerRespons
         const body = await getRequestBody(req);
         if (pathname.startsWith('/api/connection/') || pathname.startsWith('/api/terminal/')) {
             try {
-                const serverModule = await import('./server/index');
-                const data = await serverModule.handleRoutes(pathname, body);
+                const data = await handleRoute(pathname, body);
                 res.writeHead(200, { 'Content-Type': 'application/json' });
                 res.end(JSON.stringify({ ret: 0, msg: 'success', data }));
             } catch (error: any) {
@@ -300,4 +334,56 @@ async function serverRoute(req: Connect.IncomingMessage, res: http.ServerRespons
             req.on('error', reject);
         });
     }
+}
+
+/**
+ * 开发模式下的 API 路由处理（直接使用共享服务实例）
+ */
+async function handleRoute(pathname: string, body: any) {
+    // ========== 连接管理 ==========
+    if (pathname === '/api/connection/getConnections') {
+        return await connectionService.getAllConnections();
+    }
+    if (pathname === '/api/connection/getConnection') {
+        const { id } = body;
+        if (!id) throw new Error('Missing parameter: id');
+        return await connectionService.getConnectionById(id);
+    }
+    if (pathname === '/api/connection/addConnection') {
+        return await connectionService.addConnection(body);
+    }
+    if (pathname === '/api/connection/updateConnection') {
+        const { id, ...updates } = body;
+        if (!id) throw new Error('Missing parameter: id');
+        return await connectionService.updateConnection(id, updates);
+    }
+    if (pathname === '/api/connection/deleteConnection') {
+        const { id } = body;
+        if (!id) throw new Error('Missing parameter: id');
+        await connectionService.deleteConnection(id);
+        return true;
+    }
+    if (pathname === '/api/connection/testConnection') {
+        return await connectionService.testConnection(body);
+    }
+
+    // ========== 终端管理 ==========
+    if (pathname === '/api/terminal/getSessions') {
+        return {
+            count: sshService.getActiveSessionCount(),
+            sessions: sshService.getActiveSessionIds(),
+        };
+    }
+    if (pathname === '/api/terminal/closeSession') {
+        const { sessionId } = body;
+        if (!sessionId) throw new Error('Missing parameter: sessionId');
+        sshService.closeSession(sessionId);
+        return true;
+    }
+    if (pathname === '/api/terminal/closeAllSessions') {
+        sshService.closeAllSessions();
+        return true;
+    }
+
+    throw new Error('API endpoint not found');
 }

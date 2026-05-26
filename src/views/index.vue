@@ -11,6 +11,7 @@
       @delete-connection="handleDelete"
       @refresh="handleRefresh"
       @toggle-sidebar="store.toggleSidebar()"
+      @open-local-shell="handleOpenLocalShell"
     />
 
     <!-- 主区域 -->
@@ -131,12 +132,20 @@ function setTermRef(tabId: string, el: any) {
 
 // 获取连接信息
 function getConnection(connectionId: string): ConnectionEntity {
+  if (connectionId === '__local__') {
+    return store.getLocalShellConnection();
+  }
   return store.connections.find(c => c.id === connectionId) || { name: '', host: '', username: '' };
 }
 
 // 连接操作
 function handleConnect(conn: ConnectionEntity) {
   store.openTab(conn);
+}
+
+// 打开本地 Shell
+function handleOpenLocalShell() {
+  store.openLocalShell();
 }
 
 // 打开编辑器
@@ -215,10 +224,42 @@ function handleKeydown(e: KeyboardEvent) {
   }
 }
 
-onMounted(() => {
-  store.loadConnections();
+onMounted(async () => {
+  await store.loadConnections();
+  await restoreOrCreateTabs();
   document.addEventListener('keydown', handleKeydown);
 });
+
+/**
+ * 恢复上次保存的 TAB，或创建默认本地 Shell
+ */
+async function restoreOrCreateTabs() {
+  const savedTabs = store.restoreTabs();
+
+  if (savedTabs.length > 0) {
+    // 恢复保存的 TAB
+    for (const saved of savedTabs) {
+      if (saved.connectionId === '__local__') {
+        // 本地 Shell TAB，直接创建
+        store.openLocalShell();
+      } else {
+        // SSH 连接 TAB，检查连接是否存在
+        const conn = store.connections.find(c => c.id === saved.connectionId);
+        if (conn) {
+          store.openTab(conn);
+        }
+      }
+    }
+    // 如果有恢复的 TAB，切换到第一个
+    if (store.tabs.length > 0) {
+      store.switchTab(store.tabs[0].id);
+      return;
+    }
+  }
+
+  // 没有可恢复的 TAB，自动创建本地 Shell
+  store.openLocalShell();
+}
 </script>
 
 <style scoped>

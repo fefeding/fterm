@@ -1,5 +1,5 @@
 /**
- * SSH 连接配置实体
+ * 连接配置实体
  * 实际数据保存在本地 JSON 文件中（~/.fterm/connections.json）
  */
 export class ConnectionEntity {
@@ -9,8 +9,8 @@ export class ConnectionEntity {
   /** 连接名称 */
   name!: string;
 
-  /** 连接类型 */
-  type: 'ssh' = 'ssh';
+  /** 连接类型：ssh 或 local（本地 shell） */
+  type: 'ssh' | 'local' = 'ssh';
 
   /** 主机地址 */
   host!: string;
@@ -32,6 +32,9 @@ export class ConnectionEntity {
 
   /** 私钥密码 */
   passphrase?: string;
+
+  /** 本地 shell 路径（仅 type='local' 时使用） */
+  shell?: string;
 
   /** 终端配置 */
   terminal: {

@@ -6,15 +6,10 @@ export const router = createRouter({
     history: createWebHistory(import.meta.env.BASE_URL),
     routes: [
         {
-            path: '/',
+            path: '/:pathMatch(.*)*',
             name: 'terminal',
             component: () => import('@/views/index.vue'),
             meta: { title: 'fterm - 远程终端' }
-        },
-        {
-            path: '/:pathMatch(.*)*',
-            name: 'not-found',
-            redirect: '/',
         },
     ],
 });

@@ -1,17 +1,19 @@
 /**
- * SSH 连接配置接口
+ * 连接配置接口
  */
 export interface ConnectionEntity {
   id?: string;
   name: string;
-  type?: 'ssh';
-  host: string;
+  type?: 'ssh' | 'local';
+  host?: string;
   port?: number;
-  username: string;
+  username?: string;
   authType?: 'password' | 'privateKey';
   password?: string;
   privateKey?: string;
   passphrase?: string;
+  /** 本地 shell 路径（仅 type='local' 时使用） */
+  shell?: string;
   terminal?: {
     cols: number;
     rows: number;

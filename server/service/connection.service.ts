@@ -1,6 +1,7 @@
 import * as fs from 'fs';
 import * as path from 'path';
 import * as os from 'os';
+import * as crypto from 'crypto';
 import { ConnectionEntity } from '../model/connection.entity';
 
 /**
@@ -155,7 +156,7 @@ export class ConnectionService {
     };
 
     if (connection.authType === 'privateKey' && connection.privateKey) {
-      config.privateKey = connection.privateKey;
+      config.privateKey = this.convertToPEM(connection.privateKey);
       if (connection.passphrase) {
         config.passphrase = connection.passphrase;
       }
@@ -164,6 +165,28 @@ export class ConnectionService {
     }
 
     return { ...config, ...connection.options };
+  }
+
+  /**
+   * 将 OpenSSH 格式的私钥转换为 PEM 格式
+   * ssh2 库不支持 OpenSSH 格式，需要转换
+   */
+  private convertToPEM(privateKey: string): string {
+    // 如果已经是 PEM 格式，直接返回
+    if (privateKey.includes('BEGIN RSA PRIVATE KEY') || privateKey.includes('BEGIN PRIVATE KEY')) {
+      return privateKey;
+    }
+    // 尝试转换 OpenSSH 格式为 PEM 格式
+    try {
+      const keyObject = crypto.createPrivateKey({
+        key: privateKey,
+        format: 'openssh' as crypto.KeyFormat,
+      });
+      return keyObject.export({ type: 'pkcs8', format: 'pem' }).toString();
+    } catch (e) {
+      console.warn('转换私钥格式失败，使用原始私钥:', (e as Error).message);
+      return privateKey;
+    }
   }
 
   /**

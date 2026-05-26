@@ -4,6 +4,14 @@ import type { ConnectionEntity, TerminalTab } from '@/typings/connection';
 import { toast } from '@/utils/toast';
 import { modal } from '@/utils/modal';
 
+const TABS_STORAGE_KEY = 'fterm_saved_tabs';
+
+/** 保存的 TAB 信息（用于持久化） */
+interface SavedTab {
+  connectionId: string;
+  connectionName: string;
+}
+
 export type TerminalState = {
   connections: ConnectionEntity[];
   tabs: TerminalTab[];
@@ -91,6 +99,7 @@ export const useTerminalStore = defineStore('terminal', {
       };
       this.tabs.push(tab);
       this.activeTabId = tabId;
+      this.saveTabs();
       return tab;
     },
 
@@ -102,6 +111,7 @@ export const useTerminalStore = defineStore('terminal', {
       if (this.activeTabId === tabId) {
         this.activeTabId = this.tabs.length > 0 ? this.tabs[Math.min(index, this.tabs.length - 1)]?.id || null : null;
       }
+      this.saveTabs();
     },
 
     // 更新 Tab 状态
@@ -116,11 +126,81 @@ export const useTerminalStore = defineStore('terminal', {
     // 切换活动 Tab
     switchTab(tabId: string) {
       this.activeTabId = tabId;
+      this.saveTabs();
     },
 
     // 切换侧边栏
     toggleSidebar() {
       this.sidebarCollapsed = !this.sidebarCollapsed;
+    },
+
+    // 保存 TAB 状态到 localStorage
+    saveTabs() {
+      try {
+        const saved: SavedTab[] = this.tabs.map(t => ({
+          connectionId: t.connectionId,
+          connectionName: t.connectionName,
+        }));
+        localStorage.setItem(TABS_STORAGE_KEY, JSON.stringify(saved));
+      } catch (e) {
+        console.warn('保存 TAB 状态失败:', e);
+      }
+    },
+
+    // 从 localStorage 恢复 TAB 状态
+    restoreTabs(): SavedTab[] {
+      try {
+        const data = localStorage.getItem(TABS_STORAGE_KEY);
+        if (data) {
+          return JSON.parse(data) as SavedTab[];
+        }
+      } catch (e) {
+        console.warn('恢复 TAB 状态失败:', e);
+      }
+      return [];
+    },
+
+    // 创建本地 Shell TAB（不保存到连接列表）
+    openLocalShell() {
+      const LOCAL_SHELL_ID = '__local__';
+      // 检查是否已有本地 Shell TAB
+      const existing = this.tabs.find(t => t.connectionId === LOCAL_SHELL_ID);
+      if (existing) {
+        this.switchTab(existing.id);
+        return existing;
+      }
+      // 创建新的本地 Shell TAB
+      const tabId = `tab-local-${Date.now()}-${Math.random().toString(36).substr(2, 6)}`;
+      const tab: TerminalTab = {
+        id: tabId,
+        connectionId: LOCAL_SHELL_ID,
+        connectionName: '本地 Shell',
+        status: 'connecting',
+        cols: 80,
+        rows: 24,
+      };
+      this.tabs.push(tab);
+      this.activeTabId = tabId;
+      this.saveTabs();
+      return tab;
+    },
+
+    // 获取本地 Shell 连接信息（虚拟连接，不保存）
+    getLocalShellConnection(): ConnectionEntity {
+      return {
+        id: '__local__',
+        name: '本地 Shell',
+        type: 'local',
+        host: '',
+        username: '',
+        shell: '',
+        terminal: {
+          cols: 80, rows: 24, fontSize: 14,
+          fontFamily: 'Menlo, Monaco, "Courier New", monospace',
+          theme: 'dark',
+          cursorStyle: 'block' as 'block' | 'underline' | 'bar',
+        },
+      };
     },
   },
 });
