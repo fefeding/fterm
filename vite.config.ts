@@ -181,7 +181,21 @@ const config = defineConfig({
                                         // 根据会话类型设置数据接收
                                         const sendOutput = (chunk: any) => {
                                             if (ws.readyState === WebSocket.OPEN) {
-                                                ws.send(JSON.stringify({ type: 'terminal', sessionId, data: typeof chunk === 'string' ? chunk : chunk.toString('utf-8') }));
+                                                // 检测二进制数据（ZMODEM等协议），用base64编码传输
+                                                const buf = Buffer.isBuffer(chunk) ? chunk : Buffer.from(typeof chunk === 'string' ? chunk : chunk);
+                                                const hasBinary = buf.some((b: number) => b > 127);
+                                                // 调试：检测 ZMODEM 特征序列
+                                                const zmSig = Buffer.from([42, 42, 24, 66]);
+                                                if (buf.length >= 4 && buf.includes(zmSig)) {
+                                                    console.log('[WS-DEBUG] ZMODEM sig in SSH output! buf.length:', buf.length,
+                                                        'hasBinary:', hasBinary,
+                                                        'first 30 bytes:', Array.from(buf.slice(0, 30)).join(','));
+                                                }
+                                                if (hasBinary) {
+                                                    ws.send(JSON.stringify({ type: 'terminal', sessionId, data: buf.toString('base64'), binary: true }));
+                                                } else {
+                                                    ws.send(JSON.stringify({ type: 'terminal', sessionId, data: buf.toString('utf-8') }));
+                                                }
                                             }
                                         };
                                         const sendClose = (source: string) => () => {
@@ -212,7 +226,14 @@ const config = defineConfig({
                                     break;
                                 }
                                 case 'terminal': {
-                                    if (sid) sshService.writeData(sid, data);
+                                    if (sid && data) {
+                                        if (msg.binary) {
+                                            // 二进制数据（ZMODEM等）
+                                            sshService.writeData(sid, Buffer.from(data, 'base64'));
+                                        } else {
+                                            sshService.writeData(sid, data);
+                                        }
+                                    }
                                     break;
                                 }
                                 case 'resize': {

@@ -119,6 +119,7 @@ export default {
     uploadFailed: '上传失败',
     downloadComplete: '文件下载完成',
     downloadFailed: '下载失败',
+    waitingForFiles: '等待远程发送文件...',
   },
   modal: {
     close: '关闭',

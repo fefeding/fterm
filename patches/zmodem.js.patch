@@ -1,0 +1,37 @@
+diff --git a/CHANGELOG.md b/CHANGELOG.md
+deleted file mode 100644
+index 1cc5bbf80b17202a8c9736d922c7e979b64b4e1d..0000000000000000000000000000000000000000
+diff --git a/src/zheader.js b/src/zheader.js
+index 56c22fc259e666632cf50fc5f4718f3fa9810c3a..271854920edde9ba0f8a6ba6d2d24dd01339d4a2 100644
+--- a/src/zheader.js
++++ b/src/zheader.js
+@@ -707,17 +707,26 @@ function _parse_hex(bytes_arr) {
+     //^^ I guess it can be either CR/LF or just LF … though those two
+     //sentences appear to be saying contradictory things.
+ 
+-    var lf_pos = bytes_arr.indexOf( 0x8a );     //lrzsz sends this
++    // Fix: Search for LF only within the expected hex header range (max 20 bytes)
++    // The original code searched the entire buffer, which fails when
++    // non-ZMODEM text precedes the hex header (e.g., "rz waiting to receive.\n")
++    var search_limit = Math.min(bytes_arr.length, 21);
++    var lf_pos = -1;
++    for (var _si = 0; _si < search_limit; _si++) {
++        if (bytes_arr[_si] === 0x8a) { lf_pos = _si; break; }
++    }
+ 
+     if (-1 === lf_pos) {
+-        lf_pos = bytes_arr.indexOf( 0x0a );
++        for (var _si2 = 0; _si2 < search_limit; _si2++) {
++            if (bytes_arr[_si2] === 0x0a) { lf_pos = _si2; break; }
++        }
+     }
+ 
+     var hdr_err, hex_bytes;
+ 
+     if (-1 === lf_pos) {
+         if (bytes_arr.length > 11) {
+-            hdr_err = "Invalid hex header - no LF detected within 12 bytes!";
++            hdr_err = "Invalid hex header - no LF detected within 21 bytes!";
+         }
+ 
+         //incomplete header

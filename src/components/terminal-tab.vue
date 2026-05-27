@@ -24,6 +24,7 @@ import { FitAddon } from '@xterm/addon-fit';
 import { WebLinksAddon } from '@xterm/addon-web-links';
 import '@xterm/xterm/css/xterm.css';
 import type { ConnectionEntity, WSMessage } from '@/typings/connection';
+import { createSentry, base64ToOctets, stringToOctets, octetsToBase64, Zmodem } from '@/utils/zmodem';
 
 const { t } = useI18n();
 
@@ -35,7 +36,7 @@ const props = defineProps<{
 
 const emit = defineEmits<{
   (e: 'status-change', status: 'connecting' | 'connected' | 'disconnected' | 'error', sessionId?: string): void;
-  (e: 'zmodem-detected'): void;
+  (e: 'zmodem-detected', detection: any): void;
 }>();
 
 const terminalWrapper = ref<HTMLElement>();
@@ -48,6 +49,9 @@ let fitAddon: FitAddon | null = null;
 let ws: WebSocket | null = null;
 let sessionId: string | null = null;
 let resizeObserver: ResizeObserver | null = null;
+let sentry: any = null;
+let zmodemSession: any = null;
+let zmodemRole: string | null = null; // 'send' | 'receive'
 
 // 初始化终端
 function initTerminal() {
@@ -115,6 +119,153 @@ function initTerminal() {
   terminal.onResize(({ cols, rows }) => {
     sendToServer({ type: 'resize', sessionId: sessionId || undefined, data: { cols, rows } });
   });
+
+  // 初始化 ZMODEM Sentry
+  initSentry();
+}
+
+// 初始化 ZMODEM Sentry
+function initSentry() {
+  console.log('[ZMODEM] Initializing Sentry...');
+  sentry = createSentry({
+    toTerminal: (octets: number[]) => {
+      // 将 octets 写入终端
+      if (terminal && octets.length > 0) {
+        // 调试：检查写入终端的数据是否包含 ZMODEM 特征
+        const hasZm = octets.length >= 4 && octets.some((_, i) =>
+          i + 3 < octets.length &&
+          octets[i] === 42 && octets[i+1] === 42 && octets[i+2] === 24 && octets[i+3] === 66
+        );
+        if (hasZm) {
+          console.warn('[ZMODEM] !!! Sentry passed ZMODEM bytes to terminal! length:', octets.length,
+            'bytes:', octets.slice(0, 30).join(','));
+        }
+        terminal.write(new Uint8Array(octets));
+      }
+    },
+    sender: (octets: number[]) => {
+      // 将 ZMODEM 协议数据发送到服务器（base64 编码）
+      const b64 = octetsToBase64(octets);
+      if (ws && ws.readyState === WebSocket.OPEN) {
+        ws.send(JSON.stringify({
+          type: 'terminal',
+          sessionId: sessionId || undefined,
+          data: b64,
+          binary: true,
+        }));
+      }
+    },
+    onDetect: (detection: any) => {
+      const role = detection.get_session_role();
+      console.log('[ZMODEM] >>>> onDetect fired! role:', role, 'existingSession:', !!zmodemSession);
+
+      // 【关键防护】如果已有活跃 ZMODEM session，忽略新的检测
+      // 原因：rz 时浏览器发送 ZRINIT 回应，PTY 可能回显 ZRINIT 字节
+      // sentry 会把回显的 ZRINIT 误检为 Session.Send（role='send'），
+      // 覆盖正确的 Session.Receive（role='receive'）
+      if (zmodemSession) {
+        console.warn('[ZMODEM] Ignoring duplicate detection (role:', role, '), session already active');
+        try { detection.deny(); } catch(_e) { /* ignore */ }
+        return;
+      }
+
+      console.log('[ZMODEM] Detected:', role, '- auto-confirming immediately');
+
+      // 立即 confirm，防止后续 ZRQINIT/ZRINIT 导致 detection 变 stale
+      try {
+        const session = detection.confirm();
+        zmodemSession = session;
+        zmodemRole = role;
+
+        // 【关键补丁1】预注册所有可能的事件类型，防止 "Bad event" 异常
+        // Session.Send 没有注册 'offer' 等事件，如果意外触发会崩溃
+        const neededEvents = ['offer', 'data_in', 'file_end'];
+        for (const evt of neededEvents) {
+          if (!session._on_evt || session._on_evt[evt] === undefined) {
+            console.log('[ZMODEM] Pre-registering missing event:', evt);
+            try { session._Add_event(evt); } catch(_e) { /* ignore */ }
+          }
+        }
+
+        // 【关键补丁2】包装 session.consume 以安全处理事件时序问题
+        const _origSessionConsume = session.consume.bind(session);
+        const _eventBuffer: Array<{evt: string, args: any[]}> = [];
+        let _handlersReady = false;
+
+        // 包装 _Happen 来缓存或安全忽略早期事件
+        const _origHappen = session._Happen.bind(session);
+        session._Happen = function(this: any, evt: string, ...args: any[]) {
+          if (!_handlersReady) {
+            // handlers 尚未注册，缓存事件
+            console.log('[ZMODEM] Early event (buffering):', evt);
+            _eventBuffer.push({ evt, args });
+            return;
+          }
+          return _origHappen(evt, ...args);
+        };
+
+        // 包装 consume 捕获任何未处理的异常
+        session.consume = function(octets: number[]) {
+          try {
+            return _origSessionConsume(octets);
+          } catch (err: any) {
+            console.warn('[ZMODEM] session.consume() error (caught):', err);
+          }
+        };
+
+        // 监听 session 结束，清理状态以便下次检测
+        // 直接包装内部方法，不走 _Happen 事件系统，确保不被缓冲
+        const _origOnSessionEnd = session._on_session_end?.bind(session);
+        if (_origOnSessionEnd) {
+          session._on_session_end = function() {
+            console.log('[ZMODEM] Session ended, cleaning up state');
+            zmodemSession = null;
+            zmodemRole = null;
+            return _origOnSessionEnd();
+          };
+        }
+
+        // 通知 file-transfer 组件时，传递一个 replay 函数
+        // 当 handlers 注册完毕后调用，重放缓存的事件
+        const markHandlersReady = () => {
+          _handlersReady = true;
+          console.log('[ZMODEM] Handlers ready, replaying', _eventBuffer.length, 'buffered events');
+          for (const item of _eventBuffer) {
+            try {
+              _origHappen(item.evt, ...item.args);
+            } catch (e) {
+              console.warn('[ZMODEM] Replay error for', item.evt, ':', e);
+            }
+          }
+          _eventBuffer.length = 0;
+        };
+
+        if (role === 'send') {
+          // zmodem.js: ZRINIT → Session.Send → role='send'
+          // rz 发送 ZRINIT，浏览器应上传文件
+          console.log('[ZMODEM] rz detected (ZRINIT) - browser will send files');
+          emit('zmodem-detected', { role, session, markHandlersReady });
+        } else {
+          // zmodem.js: ZRQINIT → Session.Receive → role='receive'
+          // sz 发送 ZRQINIT，浏览器应下载文件
+          console.log('[ZMODEM] sz detected (ZRQINIT) - browser will receive files');
+          emit('zmodem-detected', { role, session, markHandlersReady });
+        }
+      } catch (err) {
+        console.error('[ZMODEM] Auto-confirm error:', err);
+        zmodemSession = null;
+        zmodemRole = null;
+      }
+    },
+    onRetract: () => {
+      console.log('[ZMODEM] Retracted - detection invalidated');
+      // 只在没有已确认 session 时清理（retract 只影响 pending detection）
+      if (!zmodemSession) {
+        zmodemRole = null;
+      }
+    },
+  });
+  console.log('[ZMODEM] Sentry initialized:', !!sentry);
 }
 
 // WebSocket 连接
@@ -163,16 +314,194 @@ function connectWebSocket() {
   };
 }
 
+/** Hex header length (without CR+LF): type(2) + flags(8) + crc(4) = 14 hex chars + 5 prefix = 19, or 18 without CR */
+const ZMODEM_HEX_HEADER_LEN = 19; // with CR before LF
+const ZMODEM_HEX_HEADER_LEN_NO_CR = 18;
+
+/**
+ * 手动检测 ZRQINIT/ZRINIT hex 帧
+ * 搜索 **\x18B0 前缀 + 正确的 hex header 结构（含 CR+LF 校验）
+ */
+function detectZmodemFrame(octets: number[]): { type: 'ZRQINIT' | 'ZRINIT'; offset: number; frameLen: number } | null {
+  for (let i = 0; i <= octets.length - 20; i++) {
+    if (octets[i] === 42 && octets[i+1] === 42 && octets[i+2] === 24 &&
+        octets[i+3] === 66 && octets[i+4] === 48) {
+      // 找到 **\x18B0 前缀，验证 hex header 结构
+      // 在 i+5 开始搜索 CR(0x0d)+LF(0x8a) 或 LF(0x0a)
+      const searchEnd = Math.min(i + 25, octets.length);
+      for (let j = i + 5; j < searchEnd; j++) {
+        if (octets[j] === 0x8a || octets[j] === 0x0a) {
+          // 检查 CR+LF: LF 前一字节应为 CR(0x0d 或 0x8d)
+          const hexLen = j - i; // 从 ** 到 LF(含) 的长度
+          if ((hexLen === ZMODEM_HEX_HEADER_LEN + 1 && (octets[j-1] === 0x0d || octets[j-1] === 0x8d)) ||
+              hexLen === ZMODEM_HEX_HEADER_LEN_NO_CR + 1) {
+            // 有效 hex header! 检查帧类型
+            const frameLen = j - i + 1; // 包含 LF
+            // 可选：也包含尾部 XON (0x11)
+            const totalLen = (j + 1 < octets.length && octets[j+1] === 0x11) ? frameLen + 1 : frameLen;
+            if (octets[i+5] === 48) return { type: 'ZRQINIT', offset: i, frameLen: totalLen };
+            if (octets[i+5] === 49) return { type: 'ZRINIT', offset: i, frameLen: totalLen };
+          }
+          break;
+        }
+      }
+    }
+  }
+  return null;
+}
+
+/**
+ * 手动创建 ZMODEM session 并设置到 sentry
+ * 完全绕过 sentry 的检测机制（因为 Vite 缓存导致 _parse_hex patch 不生效）
+ */
+function createManualSession(type: 'ZRQINIT' | 'ZRINIT', frameOctets: number[]) {
+  let session: any;
+  let role: string;
+
+  if (type === 'ZRQINIT') {
+    // sz 命令发送 ZRQINIT → 远程发送 → 浏览器接收 → Session.Receive
+    session = new (Zmodem.Session as any).Receive();
+    role = 'receive';
+  } else {
+    // rz 命令发送 ZRINIT → 远程接收 → 浏览器发送 → Session.Send
+    session = new (Zmodem.Session as any).Send(
+      Zmodem.Header.build('ZRINIT', ['CANFDX', 'CANOVIO', 'CANFC32'])
+    );
+    role = 'send';
+  }
+
+  zmodemSession = session;
+  zmodemRole = role;
+  console.log('[ZMODEM] Manual session created:', role, '(' + type + ')');
+
+  // 【关键】清理 sentry 内部状态，防止旧缓存数据干扰
+  sentry._cache = [];
+  sentry._parsed_session = null;
+  sentry._zsession = session;
+
+  // 注册 garbage 事件（将非 ZMODEM 数据输出到终端）
+  session.on('garbage', (garbage: number[]) => {
+    if (terminal && garbage.length > 0) {
+      terminal.write(new Uint8Array(garbage));
+    }
+  });
+
+  // session 结束时清理 sentry 和本地状态
+  session.on('session_end', () => {
+    console.log('[ZMODEM] Session ended (via event), cleaning up');
+    sentry._zsession = null;
+    zmodemSession = null;
+    zmodemRole = null;
+  });
+
+  // 设置 sender（将 ZMODEM 协议数据发回远程）
+  session.set_sender((octets: number[]) => {
+    const b64 = octetsToBase64(octets);
+    if (ws && ws.readyState === WebSocket.OPEN) {
+      ws.send(JSON.stringify({
+        type: 'terminal',
+        sessionId: sessionId || undefined,
+        data: b64,
+        binary: true,
+      }));
+    }
+  });
+
+  // 预注册 Receive session 才有的事件，防止 Session.Send 被误创建时崩溃
+  const neededEvents = ['offer', 'data_in', 'file_end'];
+  for (const evt of neededEvents) {
+    if (!session._on_evt || session._on_evt[evt] === undefined) {
+      try { session._Add_event(evt); } catch(_e) { /* ignore */ }
+    }
+  }
+
+  // 事件缓冲（handlers 注册前的事件先缓存）
+  const _eventBuffer: Array<{evt: string, args: any[]}> = [];
+  let _handlersReady = false;
+  const _origHappen = session._Happen.bind(session);
+  session._Happen = function(evt: string, ...args: any[]) {
+    if (!_handlersReady) {
+      _eventBuffer.push({ evt, args });
+      return;
+    }
+    return _origHappen(evt, ...args);
+  };
+
+  const _origSessionConsume = session.consume.bind(session);
+  session.consume = function(octets: number[]) {
+    try { return _origSessionConsume(octets); }
+    catch (err: any) { console.warn('[ZMODEM] session.consume() error (caught):', err); }
+  };
+
+  // 包装 _on_session_end 确保状态清理（不走 _Happen 事件系统）
+  const _origOnSessionEnd = session._on_session_end?.bind(session);
+  if (_origOnSessionEnd) {
+    session._on_session_end = function() {
+      console.log('[ZMODEM] _on_session_end called, cleaning up');
+      zmodemSession = null;
+      zmodemRole = null;
+      return _origOnSessionEnd();
+    };
+  }
+
+  const markHandlersReady = () => {
+    _handlersReady = true;
+    console.log('[ZMODEM] Handlers ready, replaying', _eventBuffer.length, 'buffered events');
+    for (const item of _eventBuffer) {
+      try { _origHappen(item.evt, ...item.args); } catch (e) { /* ignore */ }
+    }
+    _eventBuffer.length = 0;
+  };
+
+  // 通知父组件
+  emit('zmodem-detected', { role, session, markHandlersReady });
+}
+
 // 处理服务端消息
 function handleServerMessage(msg: WSMessage) {
   switch (msg.type) {
     case 'terminal':
-      // SSH 输出数据
-      if (msg.data && terminal) {
-        terminal.write(msg.data);
-        // ZMODEM 检测
-        if (typeof msg.data === 'string' && msg.data.includes('\x18B00')) {
-          emit('zmodem-detected');
+      if (msg.data && sentry) {
+        let octets: number[];
+        if (msg.binary) {
+          octets = base64ToOctets(msg.data as string);
+        } else {
+          octets = stringToOctets(msg.data as string);
+        }
+        try {
+          // 【核心修复】zmodem.js 的 _parse_hex 在整个 buffer 中搜索 LF，
+          // 当 ZRQINIT/ZRINIT 帧前面有文本时解析失败。
+          // Vite 缓存导致 node_modules 的 patch 不生效。
+          // 方案：完全绕过 sentry 的检测，手动识别 ZMODEM 帧。
+          if (!zmodemSession) {
+            const frameInfo = detectZmodemFrame(octets);
+            if (frameInfo) {
+              console.log('[ZMODEM] Manual detection:', frameInfo.type,
+                'at offset', frameInfo.offset, 'frameLen:', frameInfo.frameLen);
+              // 将帧前的文本直接写到终端（绕过 sentry）
+              if (frameInfo.offset > 0) {
+                const textPart = octets.slice(0, frameInfo.offset);
+                console.log('[ZMODEM] Writing prefix text to terminal:', textPart.length, 'bytes');
+                if (terminal) terminal.write(new Uint8Array(textPart));
+              }
+              // 提取帧数据
+              const frameData = octets.slice(frameInfo.offset, frameInfo.offset + frameInfo.frameLen);
+              // 手动创建 session（会清理 sentry 缓存并设置 _zsession）
+              createManualSession(frameInfo.type, frameData);
+              // 帧之后的尾部数据（如果有）通过 sentry 路由（现在 _zsession 已设置）
+              const trailing = octets.slice(frameInfo.offset + frameInfo.frameLen);
+              if (trailing.length > 0) {
+                console.log('[ZMODEM] Passing trailing bytes to sentry:', trailing.length);
+                sentry.consume(trailing);
+              }
+              return;
+            }
+            // 没有检测到帧，且没有活跃 session → 正常通过 sentry
+            // （sentry 可能检测到但我们没检测到，让它处理）
+          }
+          sentry.consume(octets);
+        } catch (err) {
+          console.warn('[ZMODEM] handleServerMessage error:', err);
         }
       }
       break;
@@ -232,6 +561,21 @@ function getTerminal() {
   return terminal;
 }
 
+// 获取 ZMODEM session 对象
+function getZmodemSession() {
+  return zmodemSession;
+}
+
+// 获取 ZMODEM role
+function getZmodemRole() {
+  return zmodemRole;
+}
+
+// 获取 Sentry 实例
+function getSentry() {
+  return sentry;
+}
+
 // 监听 active 状态变化，切换时重新 fit
 watch(() => props.active, (val) => {
   if (val) {
@@ -263,7 +607,7 @@ onBeforeUnmount(() => {
   terminal?.dispose();
 });
 
-defineExpose({ focus, fit, writeToTerminal, getTerminal, sessionId });
+defineExpose({ focus, fit, writeToTerminal, getTerminal, getZmodemSession, getZmodemRole, getSentry, sendToServer, get sessionId() { return sessionId; } });
 </script>
 
 <style scoped>

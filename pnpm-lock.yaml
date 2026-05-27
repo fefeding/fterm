@@ -4,6 +4,11 @@ settings:
   autoInstallPeers: true
   excludeLinksFromLockfile: false
 
+patchedDependencies:
+  zmodem.js:
+    hash: dba85ba4b3429ef2b7cf7722dfd1424332618d438b27499a9bc194fae5594a6e
+    path: patches/zmodem.js.patch
+
 importers:
 
   .:
@@ -161,7 +166,7 @@ importers:
         version: 3.3.2(typescript@5.9.3)
       zmodem.js:
         specifier: ^0.1.10
-        version: 0.1.10
+        version: 0.1.10(patch_hash=dba85ba4b3429ef2b7cf7722dfd1424332618d438b27499a9bc194fae5594a6e)
 
 packages:
 
@@ -5773,7 +5778,7 @@ snapshots:
       compress-commons: 6.0.2
       readable-stream: 4.7.0
 
-  zmodem.js@0.1.10:
+  zmodem.js@0.1.10(patch_hash=dba85ba4b3429ef2b7cf7722dfd1424332618d438b27499a9bc194fae5594a6e):
     dependencies:
       crc-32: 1.2.2
 

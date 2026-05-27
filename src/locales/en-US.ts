@@ -119,6 +119,7 @@ export default {
     uploadFailed: 'Upload failed',
     downloadComplete: 'File download complete',
     downloadFailed: 'Download failed',
+    waitingForFiles: 'Waiting for files from remote...',
   },
   modal: {
     close: 'Close',

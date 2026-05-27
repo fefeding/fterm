@@ -15,6 +15,10 @@
 
     <!-- 主区域 -->
     <div class="main-area">
+      <!-- 侧边栏展开按钮（收起时显示） -->
+      <button v-if="store.sidebarCollapsed" class="sidebar-toggle-btn" @click="store.toggleSidebar()" :title="t('sidebar.expand')">
+        <i class="bi bi-chevron-right"></i>
+      </button>
       <!-- Tab 栏 -->
       <div v-if="store.tabs.length > 0" class="tab-bar" style="height: var(--tab-bar-height);" @contextmenu.prevent>
         <div
@@ -66,7 +70,7 @@
               :connection="getConnection(tab.connectionId)"
               :active="tab.id === store.activeTabId"
               @status-change="(s, sid) => handleStatusChange(tab.id, s, sid)"
-              @zmodem-detected="handleZmodemDetected(tab.id)"
+              @zmodem-detected="(info: any) => handleZmodemDetected(tab.id, info)"
             />
           </div>
         </template>
@@ -309,10 +313,15 @@ function handleStatusChange(tabId: string, status: TerminalTabType['status'], se
   store.updateTabStatus(tabId, status, sessionId);
 }
 
-// ZMODEM 检测
-function handleZmodemDetected(tabId: string) {
-  showZmodemBtn.value = true;
+// ZMODEM 检测 - 自动弹出文件传输对话框
+function handleZmodemDetected(tabId: string, info: any) {
+  console.log('[ZMODEM] Auto-detected in tab:', tabId, 'role:', info?.role);
   activeZmodemTabId.value = tabId;
+  const termRef = termRefs.get(tabId);
+  if (termRef && fileTransferRef.value) {
+    // 自动弹出文件传输对话框，传入 session 信息
+    fileTransferRef.value.show(tabId, termRef, info);
+  }
 }
 
 // 文件传输
@@ -423,6 +432,35 @@ async function restoreOrCreateTabs() {
   flex-direction: column;
   overflow: hidden;
   min-width: 0;
+  position: relative;
+}
+
+.sidebar-toggle-btn {
+  position: absolute;
+  top: 50%;
+  left: 0;
+  transform: translateY(-50%);
+  z-index: 100;
+  width: 20px;
+  height: 48px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background-color: rgba(49, 50, 68, 0.9);
+  border: 1px solid var(--border-color);
+  border-left: none;
+  border-radius: 0 6px 6px 0;
+  color: var(--text-secondary);
+  cursor: pointer;
+  font-size: 12px;
+  transition: all 0.15s ease;
+  padding: 0;
+}
+
+.sidebar-toggle-btn:hover {
+  background-color: rgba(69, 71, 90, 0.95);
+  color: var(--accent);
+  width: 24px;
 }
 
 .terminal-area {

@@ -145,6 +145,7 @@ export class SSHService {
               rows,
               cwd: homeDir,
               env: cleanEnv,
+              useBinary: true, // 启用二进制模式，保留 ZMODEM 等协议数据
             });
 
             const session: TerminalSession = {
@@ -355,7 +356,12 @@ export class SSHService {
 
     try {
       if (session.pty) {
-        session.pty.write(typeof data === 'string' ? data : data.toString('utf-8'));
+        // node-pty: 支持 string 和 Buffer
+        if (Buffer.isBuffer(data)) {
+          session.pty.write(data);
+        } else {
+          session.pty.write(data);
+        }
       } else if (session.type === 'local' && session.childProcess?.stdin) {
         session.childProcess.stdin.write(data);
       } else if (session.stream) {

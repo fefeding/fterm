@@ -136,7 +136,14 @@ wss.on('connection', async (ws, req) => {
             // 根据会话类型绑定输出和关闭事件
             const sendOutput = (chunk) => {
               if (ws.readyState === WebSocket.OPEN) {
-                ws.send(JSON.stringify({ type: 'terminal', sessionId, data: typeof chunk === 'string' ? chunk : chunk.toString('utf-8') }));
+                // 检查是否包含非ASCII字节（ZMODEM等二进制数据）
+                const buf = Buffer.isBuffer(chunk) ? chunk : Buffer.from(chunk);
+                const hasBinary = buf.some(b => b > 127);
+                if (hasBinary) {
+                  ws.send(JSON.stringify({ type: 'terminal', sessionId, data: buf.toString('base64'), binary: true }));
+                } else {
+                  ws.send(JSON.stringify({ type: 'terminal', sessionId, data: buf.toString('utf-8') }));
+                }
               }
             };
             const sendClose = (source) => () => {
@@ -173,7 +180,12 @@ wss.on('connection', async (ws, req) => {
         case 'terminal': {
           // 用户输入转发到 SSH
           if (sid && data) {
-            sshService.writeData(sid, data);
+            if (msg.binary) {
+              // 二进制数据（ZMODEM等）
+              sshService.writeData(sid, Buffer.from(data, 'base64'));
+            } else {
+              sshService.writeData(sid, data);
+            }
           }
           break;
         }

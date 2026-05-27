@@ -252,6 +252,14 @@ body {
 }
 
 /* Modal */
+.modal {
+  left: 0 !important;
+  right: 0 !important;
+}
+.modal-dialog {
+  margin-left: auto !important;
+  margin-right: auto !important;
+}
 .modal-content {
   background-color: var(--bg-sidebar);
   border-color: var(--border-color);

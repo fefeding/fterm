@@ -48,6 +48,7 @@ export interface WSMessage {
   type: 'terminal' | 'resize' | 'create' | 'close' | 'status' | 'error' | 'zmodem';
   sessionId?: string;
   data?: any;
+  binary?: boolean; // base64 编码的二进制数据标记
 }
 
 /**

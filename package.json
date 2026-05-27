@@ -111,6 +111,9 @@
       "cpu-features",
       "ssh2",
       "node-pty"
-    ]
+    ],
+    "patchedDependencies": {
+      "zmodem.js": "patches/zmodem.js.patch"
+    }
   }
 }

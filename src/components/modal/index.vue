@@ -103,8 +103,8 @@ function hide() {
     return Promise.resolve();
 }
 
-function confirm() { emits('onConfirm'); dynamicOptions.value?.onConfirm?.(); }
-function cancel() { hide(); emits('onCancel'); dynamicOptions.value?.onCancel?.(); }
+function confirm() { (document.activeElement as HTMLElement)?.blur?.(); emits('onConfirm'); dynamicOptions.value?.onConfirm?.(); }
+function cancel() { (document.activeElement as HTMLElement)?.blur?.(); hide(); emits('onCancel'); dynamicOptions.value?.onCancel?.(); }
 
 watch(() => props.visible, (visible) => { visible ? show() : hide(); });
 onMounted(() => { modal = getModal(); });
@@ -131,6 +131,5 @@ defineExpose({
 </script>
 
 <style scoped>
-.modal-dialog { z-index: var(--bs-modal-zindex); }
 .modal-body { min-height: 80px; display: flex; flex-direction: column; align-items: stretch; }
 </style>

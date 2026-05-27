@@ -8,8 +8,8 @@
     @onClose="handleClose"
   >
     <div class="file-transfer-body">
-      <!-- 操作选择 -->
-      <div class="d-flex gap-2 mb-3">
+      <!-- 操作选择（自动模式时隐藏） -->
+      <div v-if="!zmodemAutoMode" class="d-flex gap-2 mb-3">
         <button
           class="btn flex-fill"
           :class="mode === 'upload' ? 'btn-primary' : 'btn-outline-secondary'"
@@ -53,7 +53,11 @@
 
       <!-- 下载模式 -->
       <div v-if="mode === 'download'">
-        <div class="mb-3">
+        <div v-if="zmodemAutoMode" class="text-center py-3">
+          <div class="spinner-border spinner-border-sm text-primary me-2"></div>
+          {{ t('fileTransfer.waitingForFiles') }}
+        </div>
+        <div v-else class="mb-3">
           <label class="form-label">{{ t('fileTransfer.remotePath') }}</label>
           <input
             type="text"
@@ -64,9 +68,10 @@
           >
         </div>
         <button
+          v-if="!zmodemAutoMode"
           class="btn btn-primary w-100"
           :disabled="!remoteFilePath || transferring"
-          @click="startDownload"
+          @click="startManualDownload"
         >
           <i class="bi bi-download me-1"></i>{{ t('fileTransfer.startDownload') }}
         </button>
@@ -135,7 +140,7 @@
 import { ref } from 'vue';
 import { useI18n } from 'vue-i18n';
 import Modal from '@/components/modal/index.vue';
-import { ZmodemSession, formatFileSize, type ZmodemProgress } from '@/utils/zmodem';
+import { Zmodem, formatFileSize, type ZmodemProgress } from '@/utils/zmodem';
 import { toast } from '@/utils/toast';
 
 const { t } = useI18n();
@@ -149,23 +154,116 @@ const transferring = ref(false);
 const currentProgress = ref<ZmodemProgress | null>(null);
 const transferHistory = ref<ZmodemProgress[]>([]);
 
-let zmodemSession: ZmodemSession | null = null;
+let zmodemSession: any = null;
+let zmodemAutoMode = ref(false);
 let activeTermRef: any = null;
 let activeTabId: string | null = null;
 
-function show(tabId: string, termRef: any) {
+/**
+ * 向终端发送数据（自动附带正确的 sessionId）
+ */
+function sendToTerm(data: string) {
+  if (!activeTermRef) return;
+  const sid = activeTermRef.sessionId;
+  activeTermRef.sendToServer({
+    type: 'terminal',
+    sessionId: sid || undefined,
+    data,
+  });
+}
+
+/**
+ * 注册接收文件的 session 事件处理器
+ */
+function setupReceiveHandlers(session: any) {
+  session.on('offer', (offer: any) => {
+    handleFileOffer(offer);
+  });
+  session.on('session_end', () => {
+    console.log('[FileTransfer] Receive session ended');
+    transferring.value = false;
+    currentProgress.value = null;
+    // 自动关闭弹窗
+    setTimeout(() => {
+      (document.activeElement as HTMLElement)?.blur?.();
+      modalRef.value?.hide?.();
+    }, 800);
+  });
+}
+
+/**
+ * 显示文件传输对话框
+ * @param tabId 当前 tab ID
+ * @param termRef 终端组件引用
+ * @param info ZMODEM session 信息 { role, session, offer? }
+ */
+function show(tabId: string, termRef: any, info?: any) {
   activeTabId = tabId;
   activeTermRef = termRef;
-  mode.value = 'upload';
   currentProgress.value = null;
   transferHistory.value = [];
   transferring.value = false;
+  zmodemAutoMode.value = false;
+
+  if (info && info.session) {
+    zmodemSession = info.session;
+    const role = info.role;
+    console.log('[FileTransfer] ZMODEM session ready, role:', role);
+
+    if (role === 'send') {
+      // zmodem.js: ZRINIT → Session.Send → role='send'
+      // rz 发送 ZRINIT 表示"我想接收文件" → 浏览器上传文件
+      mode.value = 'upload';
+      zmodemAutoMode.value = true;
+      info.markHandlersReady?.();
+    } else if (role === 'receive') {
+      // zmodem.js: ZRQINIT → Session.Receive → role='receive'
+      // sz 发送 ZRQINIT 表示"我想发送文件" → 浏览器下载文件
+      mode.value = 'download';
+      zmodemAutoMode.value = true;
+      setupReceiveHandlers(zmodemSession);
+      info.markHandlersReady?.();
+
+      // start() 发送 ZRINIT，返回 Promise<Offer | undefined>
+      zmodemSession.start?.().then((offerOrUndefined: any) => {
+        if (offerOrUndefined && typeof offerOrUndefined.accept === 'function') {
+          // start() 返回了 Offer 对象，直接处理
+          console.log('[FileTransfer] start() returned offer, handling directly');
+          handleFileOffer(offerOrUndefined);
+        } else {
+          // ZFIN 直接到达（没有文件）
+          console.log('[FileTransfer] start() resolved without offer (ZFIN)');
+        }
+      }).catch((err: any) => {
+        console.warn('[FileTransfer] session.start() error:', err);
+        toast.error(t('fileTransfer.downloadFailed'));
+      });
+    }
+  } else {
+    zmodemSession = null;
+    mode.value = 'upload';
+  }
+
   modalRef.value?.show();
 }
 
 function handleClose() {
+  // 移除焦点避免 Bootstrap aria-hidden 警告
+  (document.activeElement as HTMLElement)?.blur?.();
+
   if (transferring.value) {
     cancelTransfer();
+  } else {
+    // 即使没有传输中，也需要终止远程 rz/sz 进程
+    if (zmodemSession) {
+      try { zmodemSession.abort?.(); } catch (e) { /* ignore */ }
+      zmodemSession = null;
+    }
+    if (activeTermRef) {
+      // 双 Ctrl+C 确保终止远程进程
+      sendToTerm('\x03');
+      setTimeout(() => sendToTerm('\x03'), 300);
+    }
   }
   activeTermRef = null;
   activeTabId = null;
@@ -191,6 +289,10 @@ function handleFileSelect(e: Event) {
   }
 }
 
+/**
+ * 上传文件 - 通过终端 base64 编码传输文件到远程
+ * 当 ZMODEM rz 被检测到时，先终止 rz 进程，然后通过 base64 编码传输
+ */
 async function startUpload(files: File[]) {
   if (!activeTermRef) {
     toast.error(t('fileTransfer.terminalNotConnected'));
@@ -198,107 +300,228 @@ async function startUpload(files: File[]) {
   }
 
   transferring.value = true;
-  zmodemSession = new ZmodemSession();
 
-  zmodemSession
-    .onData((data) => {
-      // 通过终端 WebSocket 发送数据
-      const term = activeTermRef?.getTerminal?.();
-      if (term) {
-        // 将数据发送到 SSH 会话
-        if (typeof data === 'string') {
-          term.paste?.(data);
-        }
-      }
-    })
-    .onProgress((progress) => {
-      currentProgress.value = { ...progress };
-    })
-    .onComplete(() => {
-      if (currentProgress.value) {
-        transferHistory.value.unshift({
-          ...currentProgress.value,
-          state: 'complete',
-          percent: 100,
-        });
-      }
-      currentProgress.value = null;
-      transferring.value = false;
-      toast.success(t('fileTransfer.uploadComplete'));
-    })
-    .onError((error) => {
-      if (currentProgress.value) {
-        transferHistory.value.unshift({
-          ...currentProgress.value,
-          state: 'error',
-        });
-      }
-      currentProgress.value = null;
-      transferring.value = false;
-      toast.error(error.message || t('fileTransfer.uploadFailed'));
-    });
+  try {
+    // 如果有 ZMODEM session，先 abort
+    if (zmodemSession) {
+      try { zmodemSession.abort?.(); } catch (e) { /* ignore */ }
+      zmodemSession = null;
+    }
 
-  await zmodemSession.startUpload(files);
+    // 可靠终止 rz 进程
+    sendToTerm('\x03'); // Ctrl+C
+    await new Promise(r => setTimeout(r, 500));
+    sendToTerm('\x03'); // 再发一次 Ctrl+C
+    await new Promise(r => setTimeout(r, 500));
+    sendToTerm('\x15'); // Ctrl+U 清空当前行
+    await new Promise(r => setTimeout(r, 300));
+    // 禁用历史扩展，避免 ! 字符被 shell 解释
+    sendToTerm('set +H\n');
+    await new Promise(r => setTimeout(r, 300));
+
+    for (const file of files) {
+      currentProgress.value = {
+        direction: 'upload',
+        fileName: file.name,
+        bytesSent: 0,
+        bytesTotal: file.size,
+        percent: 0,
+        state: 'transferring',
+      };
+
+      // 读取文件内容并 base64 编码
+      const buffer = await file.arrayBuffer();
+      const uint8 = new Uint8Array(buffer);
+      let binary = '';
+      for (let i = 0; i < uint8.length; i++) {
+        binary += String.fromCharCode(uint8[i]);
+      }
+      const b64 = btoa(binary);
+
+      const safeName = file.name.replace(/[^a-zA-Z0-9._-]/g, '_');
+      const remotePath = safeName; // 使用当前目录，不加路径前缀
+      const CHUNK_SIZE = 2000; // 每次发送的 base64 字符数（保持命令行 < 4KB PTY 缓冲区限制）
+
+      // 创建空文件
+      sendToTerm(`: > '${remotePath}'\n`);
+      await new Promise(r => setTimeout(r, 400));
+
+      // 分块发送 base64 数据（使用 heredoc 避免回显 base64 内容）
+      const totalChunks = Math.ceil(b64.length / CHUNK_SIZE);
+      for (let i = 0; i < b64.length; i += CHUNK_SIZE) {
+        const chunk = b64.substring(i, i + CHUNK_SIZE);
+        const chunkIdx = Math.floor(i / CHUNK_SIZE) + 1;
+        // heredoc: base64 数据通过 stdin 传入，不会在命令行回显
+        sendToTerm(`base64 -d >> '${remotePath}' <<'__B64__'\n${chunk}\n__B64__\n`);
+        await new Promise(r => setTimeout(r, 80));
+
+        currentProgress.value = {
+          direction: 'upload',
+          fileName: file.name,
+          bytesSent: Math.min(i + CHUNK_SIZE, b64.length),
+          bytesTotal: b64.length,
+          percent: Math.round((chunkIdx / totalChunks) * 100),
+          state: 'transferring',
+        };
+      }
+
+      // 验证文件大小
+      const expectedSize = uint8.length;
+      sendToTerm(`echo "[fshell] Upload verify: $(wc -c < '${remotePath}') / ${expectedSize} bytes"\n`);
+      await new Promise(r => setTimeout(r, 300));
+
+      currentProgress.value = {
+        direction: 'upload',
+        fileName: file.name,
+        bytesSent: file.size,
+        bytesTotal: file.size,
+        percent: 100,
+        state: 'transferring',
+      };
+
+      transferHistory.value.unshift({
+        direction: 'upload',
+        fileName: file.name,
+        bytesSent: file.size,
+        bytesTotal: file.size,
+        percent: 100,
+        state: 'complete',
+      });
+
+      currentProgress.value = null;
+    }
+
+    transferring.value = false;
+    toast.success(t('fileTransfer.uploadComplete'));
+
+    // 自动关闭对话框
+    setTimeout(() => {
+      (document.activeElement as HTMLElement)?.blur?.();
+      modalRef.value?.hide?.();
+    }, 800);
+  } catch (error: any) {
+    console.error('[FileTransfer] Upload error:', error);
+    if (currentProgress.value) {
+      transferHistory.value.unshift({ ...currentProgress.value, state: 'error' });
+    }
+    currentProgress.value = null;
+    transferring.value = false;
+    zmodemSession = null;
+    toast.error(error.message || t('fileTransfer.uploadFailed'));
+  }
 }
 
-function startDownload() {
+/**
+ * 处理下载的文件 offer (sz)
+ * session role = 'receive'
+ */
+function handleFileOffer(offer: any) {
+  const details = offer.get_details();
+  const fileName = details.name;
+  const fileSize = details.size || 0;
+
+  console.log('[FileTransfer] Handling file offer:', fileName, fileSize, 'bytes');
+  transferring.value = true;
+
+  currentProgress.value = {
+    direction: 'download',
+    fileName,
+    bytesSent: 0,
+    bytesTotal: fileSize,
+    percent: 0,
+    state: 'transferring',
+  };
+
+  // 监听数据输入
+  let receivedBytes = 0;
+  offer.on('input', (payload: any) => {
+    receivedBytes += payload.length;
+    currentProgress.value = {
+      direction: 'download',
+      fileName,
+      bytesSent: receivedBytes,
+      bytesTotal: fileSize,
+      percent: fileSize > 0 ? Math.round((receivedBytes / fileSize) * 100) : 0,
+      state: 'transferring',
+    };
+  });
+
+  // 接受文件并保存
+  offer.accept().then((packets: any[]) => {
+    console.log('[FileTransfer] File received:', fileName, packets?.length, 'packets');
+
+    if (packets && packets.length > 0) {
+      Zmodem.Browser.save_to_disk(packets, fileName);
+    }
+
+    transferHistory.value.unshift({
+      direction: 'download',
+      fileName,
+      bytesSent: fileSize,
+      bytesTotal: fileSize,
+      percent: 100,
+      state: 'complete',
+    });
+    currentProgress.value = null;
+    transferring.value = false;
+    toast.success(t('fileTransfer.downloadComplete'));
+
+    // 自动关闭弹窗（等待可能的后续文件或 session_end）
+    setTimeout(() => {
+      if (!transferring.value) {
+        (document.activeElement as HTMLElement)?.blur?.();
+        modalRef.value?.hide?.();
+      }
+    }, 2000);
+  }).catch((err: any) => {
+    console.error('[FileTransfer] Offer accept error:', err);
+    if (currentProgress.value) {
+      transferHistory.value.unshift({ ...currentProgress.value, state: 'error' });
+    }
+    currentProgress.value = null;
+    transferring.value = false;
+    toast.error(err.message || t('fileTransfer.downloadFailed'));
+  });
+}
+
+/**
+ * 手动下载（非 ZMODEM 自动检测，通过在终端执行 sz 命令触发）
+ */
+function startManualDownload() {
   if (!remoteFilePath.value) {
     toast.warning(t('fileTransfer.remotePathRequired'));
     return;
   }
 
-  transferring.value = true;
-  zmodemSession = new ZmodemSession();
+  if (activeTermRef) {
+    // 发送 sz 命令到终端
+    const cmd = `sz ${remoteFilePath.value}\n`;
+    activeTermRef.sendToServer?.({ type: 'terminal', sessionId: undefined, data: cmd });
+    toast.info(t('fileTransfer.startDownload'));
+  }
 
-  const fileName = remoteFilePath.value.split('/').pop() || 'download';
-
-  zmodemSession
-    .onData((data) => {
-      const term = activeTermRef?.getTerminal?.();
-      if (term && typeof data === 'string') {
-        term.paste?.(data);
-      }
-    })
-    .onProgress((progress) => {
-      currentProgress.value = { ...progress };
-    })
-    .onComplete(() => {
-      if (currentProgress.value) {
-        transferHistory.value.unshift({
-          ...currentProgress.value,
-          state: 'complete',
-          percent: 100,
-        });
-      }
-      currentProgress.value = null;
-      transferring.value = false;
-      toast.success(t('fileTransfer.downloadComplete'));
-    })
-    .onError((error) => {
-      if (currentProgress.value) {
-        transferHistory.value.unshift({
-          ...currentProgress.value,
-          state: 'error',
-        });
-      }
-      currentProgress.value = null;
-      transferring.value = false;
-      toast.error(error.message || t('fileTransfer.downloadFailed'));
-    });
-
-  zmodemSession.startDownload(fileName);
+  modalRef.value?.hide?.();
 }
 
 function cancelTransfer() {
-  zmodemSession?.cancel();
+  if (zmodemSession) {
+    try {
+      zmodemSession.abort?.();
+    } catch (e) {
+      // ignore
+    }
+  }
+  // 发送 Ctrl+C 终止远程 rz/sz 进程
+  if (activeTermRef) {
+    sendToTerm('\x03');
+    setTimeout(() => sendToTerm('\x03'), 300);
+  }
   transferring.value = false;
   if (currentProgress.value) {
-    transferHistory.value.unshift({
-      ...currentProgress.value,
-      state: 'error',
-    });
+    transferHistory.value.unshift({ ...currentProgress.value, state: 'error' });
   }
   currentProgress.value = null;
+  zmodemSession = null;
 }
 
 function formatSize(bytes: number): string {
