@@ -430,7 +430,10 @@ function createManualSession(type: 'ZRQINIT' | 'ZRINIT', frameOctets: number[]) 
   const _origSessionConsume = session.consume.bind(session);
   session.consume = function(octets: number[]) {
     try { return _origSessionConsume(octets); }
-    catch (err: any) { console.warn('[ZMODEM] session.consume() error (caught):', err); }
+    catch (err: any) {
+      console.warn('[ZMODEM] session.consume() error (caught):', err);
+      throw err; // 重新抛出，让 handleServerMessage 处理
+    }
   };
 
   // 包装 _on_session_end 确保状态清理（不走 _Happen 事件系统）
@@ -469,6 +472,26 @@ function handleServerMessage(msg: WSMessage) {
           octets = stringToOctets(msg.data as string);
         }
         try {
+          // 检查已有 session 是否已结束（例如 ZFIN 后）
+          // 如果已结束，清理状态并将数据直接写到终端
+          if (zmodemSession) {
+            try {
+              if (zmodemSession.has_ended?.()) {
+                console.log('[ZMODEM] Session already ended, cleaning up and passing data to terminal');
+                zmodemSession = null;
+                zmodemRole = null;
+                sentry._zsession = null;
+                sentry._cache = [];
+                if (terminal && octets.length > 0) {
+                  terminal.write(new Uint8Array(octets));
+                }
+                return;
+              }
+            } catch (e) {
+              // has_ended 可能抛异常，忽略
+            }
+          }
+
           // 【核心修复】zmodem.js 的 _parse_hex 在整个 buffer 中搜索 LF，
           // 当 ZRQINIT/ZRINIT 帧前面有文本时解析失败。
           // Vite 缓存导致 node_modules 的 patch 不生效。
@@ -500,8 +523,15 @@ function handleServerMessage(msg: WSMessage) {
             // （sentry 可能检测到但我们没检测到，让它处理）
           }
           sentry.consume(octets);
-        } catch (err) {
-          console.warn('[ZMODEM] handleServerMessage error:', err);
+        } catch (err: any) {
+          // sentry/session 抛出错误 → 强制清理 ZMODEM 状态并恢复终端
+          console.warn('[ZMODEM] handleServerMessage error, force cleanup:', err?.message || err);
+          zmodemSession = null;
+          zmodemRole = null;
+          try { sentry._zsession = null; sentry._cache = []; sentry._parsed_session = null; } catch (_) { /* ignore */ }
+          if (terminal && octets.length > 0) {
+            terminal.write(new Uint8Array(octets));
+          }
         }
       }
       break;
