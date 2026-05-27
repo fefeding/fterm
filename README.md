@@ -1,118 +1,144 @@
 # fTerm
 
-Web SSH 远程终端工具，支持 rz/sz 文件传输。
+A web-based SSH remote terminal tool with support for rz/sz file transfer.
 
-## 特性
+## Features
 
-- **Web SSH 终端**：基于 xterm.js 的高性能终端体验
-- **本地 Shell 支持**：通过 node-pty 提供原生本地 Shell 访问
-- **文件传输**：支持 rz/sz (ZMODEM) 文件上传下载
-- **多会话管理**：支持同时管理多个 SSH/本地 Shell 会话
-- **连接管理**：可视化的连接配置管理（增删改查）
-- **桌面应用**：支持 NW.js 打包为跨平台桌面客户端
+- **Web SSH Terminal**: High-performance terminal experience based on xterm.js
+- **Local Shell Support**: Native local shell access via node-pty
+- **File Transfer**: Supports rz/sz (ZMODEM) file upload and download
+- **Multi-Session Management**: Manage multiple SSH/local shell sessions simultaneously
+- **Connection Management**: Visual connection configuration management (CRUD)
+- **Desktop App**: Packaged as a cross-platform desktop client via NW.js
 
-## 技术栈
+## Tech Stack
 
-- **前端**：Vue 3 + TypeScript + Vite + Bootstrap 5 + xterm.js
-- **后端**：Node.js + Express + WebSocket (ws)
-- **SSH/PTY**：ssh2 + node-pty
-- **构建工具**：Vite + TypeScript + nw-builder
+- **Frontend**: Vue 3 + TypeScript + Vite + Bootstrap 5 + xterm.js
+- **Backend**: Node.js + Express + WebSocket (ws)
+- **SSH/PTY**: ssh2 + node-pty
+- **Build Tools**: Vite + TypeScript + nw-builder
 
-## 快速开始
+## Quick Start
 
-### 环境要求
+### Install
+
+```bash
+npm install -g @fefeding/fterm
+# or
+pnpm add -g @fefeding/fterm
+```
+
+### Requirements
 
 - Node.js >= 18
 - pnpm
 
-### 安装依赖
+### Install Dependencies
 
 ```bash
 pnpm install
 ```
 
-### 开发模式
+### Development Mode
 
 ```bash
 pnpm dev
 ```
 
-启动后访问 http://localhost:9801
+Visit http://localhost:9801 after starting.
 
-### 构建
+### Build
 
 ```bash
-# 构建前端 + 服务端
+# Build frontend + backend
 pnpm build
 
-# 仅构建前端
+# Build frontend only
 pnpm run build-only
 ```
 
-### 启动生产服务
+### Start Production Server
+
+After global installation, use the `fterm` CLI command:
+
+```bash
+# Start the server (default port 9802)
+sudo fterm start
+
+# Stop the server
+fterm stop
+
+# Restart the server
+fterm restart
+
+# Show version
+fterm -v
+```
+
+You can also start directly with Node.js:
 
 ```bash
 node server.js
 ```
 
-默认端口 9802，可通过 `--port` 或 `PORT` 环境变量指定：
+Default port is 9802. You can specify a custom port via `--port` or the `PORT` environment variable:
 
 ```bash
 node server.js --port 3000
 ```
 
-### 桌面应用（NW.js）
+### Desktop App (NW.js)
 
 ```bash
-# 开发模式
+# Development mode
 pnpm nw:dev
 
-# 构建各平台
-pnpm nw:build        # 当前平台
+# Build for all platforms
+pnpm nw:build        # Current platform
 pnpm nw:build:win    # Windows
 pnpm nw:build:osx    # macOS
 pnpm nw:build:linux  # Linux
 ```
 
-## 项目结构
+## Project Structure
 
 ```
 .
-├── bin/              # CLI 入口
-├── dist/             # 构建产物
-├── public/           # 静态资源
-├── scripts/          # 构建脚本
-├── server/           # 服务端源码（TypeScript）
-│   ├── model/        # 实体定义
-│   ├── service/      # 业务逻辑
-│   └── index.ts      # 服务端入口
-├── src/              # 前端源码
-│   ├── adapter/      # 数据适配层
-│   ├── base/         # 基础模块
-│   ├── components/   # Vue 组件
-│   ├── platform/     # 平台入口
-│   ├── service/      # 前端服务
-│   ├── stores/       # Pinia 状态管理
-│   ├── utils/        # 工具函数
-│   └── views/        # 页面视图
-├── view/             # HTML 模板
-└── server.js         # 生产环境启动脚本
+├── bin/              # CLI entry
+├── dist/             # Build output
+├── public/           # Static assets
+├── scripts/          # Build scripts
+├── server/           # Server-side source (TypeScript)
+│   ├── model/        # Entity definitions
+│   ├── service/      # Business logic
+│   └── index.ts      # Server entry point
+├── src/              # Frontend source
+│   ├── adapter/      # Data adapter layer
+│   ├── base/         # Base modules
+│   ├── components/   # Vue components
+│   ├── platform/     # Platform entry
+│   ├── service/      # Frontend services
+│   ├── stores/       # Pinia state management
+│   ├── utils/        # Utility functions
+│   └── views/        # Page views
+├── view/             # HTML templates
+└── server.js         # Production startup script
 ```
 
-## 开发说明
+## Development Notes
 
-### 服务端开发
+### Server-Side Development
 
-服务端代码位于 `server/` 目录，使用 TypeScript 编写。开发模式下 Vite 直接引用源码，无需手动编译。
+Server code is located in the `server/` directory, written in TypeScript. In development mode, Vite directly references the source code, so no manual compilation is needed.
 
-### 前端开发
+### Frontend Development
 
-前端使用 Vue 3 Composition API + Pinia 进行状态管理，UI 框架为 Bootstrap 5。
+The frontend uses Vue 3 Composition API + Pinia for state management, with Bootstrap 5 as the UI framework.
 
-### 连接配置
+### Connection Configuration
 
-连接信息持久化存储在服务端本地文件中。
+Connection information is persisted in local files on the server side.
 
-## 许可证
+## License
 
 MIT

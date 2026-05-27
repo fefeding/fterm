@@ -51,7 +51,7 @@ async function buildPlatform(platform) {
   console.log(`========================================`);
 
   // nw-builder v4 为 ESM 模块，需动态导入
-  const { nwbuild } = await import('nw-builder');
+  const { default: nwbuild } = await import('nw-builder');
 
   const nwVersion = getNwVersion();
   console.log(`使用 NW.js 版本: ${nwVersion}`);
@@ -90,10 +90,19 @@ async function build() {
     console.log('\n2. 复制 package.json 到 dist...');
     copyFileSync(join(projectRoot, 'package.json'), join(projectRoot, 'dist', 'package.json'));
 
+    // 复制 patches 目录（pnpm patchedDependencies 需要）
+    const patchesDir = join(projectRoot, 'patches');
+    if (existsSync(patchesDir)) {
+      const distPatchesDir = join(projectRoot, 'dist', 'patches');
+      if (!existsSync(distPatchesDir)) mkdirSync(distPatchesDir, { recursive: true });
+      const { cpSync } = require('fs');
+      cpSync(patchesDir, distPatchesDir, { recursive: true, force: true });
+    }
+
     console.log('\n3. 安装生产依赖到 dist...');
     // 优先使用 pnpm，回退到 npm
     try {
-      execSync('pnpm install --prod --no-audit --no-fund', { stdio: 'inherit', cwd: resolve(projectRoot, 'dist') });
+      execSync('pnpm install --prod', { stdio: 'inherit', cwd: resolve(projectRoot, 'dist') });
     } catch (e) {
       console.log('pnpm install 失败，尝试 npm install...');
       execSync('npm install --omit=dev --no-audit --no-fund', { stdio: 'inherit', cwd: resolve(projectRoot, 'dist') });
