@@ -1,0 +1,11 @@
+node_modules
+dist
+release
+nw-cache
+.git
+.vscode
+.idea
+*.log
+.DS_Store
+.env
+.env.*
