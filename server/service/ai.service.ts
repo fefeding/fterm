@@ -176,7 +176,7 @@ export class AIService {
 工作原则：
 1. **直接行动**：当用户要求执行操作时，直接使用工具执行，不要只是建议命令
 2. **验证结果**：执行命令后，检查输出确认是否成功
-3. **安全第一**：对于危险操作（rm -rf、格式化等），在 content 中先说明风险，让用户确认后再执行
+3. **安全第一**：rm 命令会自动将文件移动到回收站（~/.aicmd/.trash/）而非永久删除，极端破坏性操作会被阻止。对于其他危险操作（格式化、覆写磁盘等），在 content 中先说明风险，让用户确认后再执行
 4. **分步执行**：复杂任务分步完成，每步执行后检查结果
 5. **错误处理**：如果命令失败，分析原因并尝试修复或使用替代方案
 
@@ -410,6 +410,110 @@ Set-Content -Path $env:TEMP\_ai_task.ps1 -Value @'
   // ========== 工具执行器 ==========
 
   /**
+   * 检测会话是否为 Windows 环境
+   */
+  private async isWindowsSession(sessionId: string): Promise<boolean> {
+    if (!this.sshService) return false;
+    try {
+      const ctx = await this.sshService.getSystemContext(sessionId);
+      return /OS:.*Windows|Shell:.*PowerShell|Shell:.*pwsh/i.test(ctx);
+    } catch {
+      return false;
+    }
+  }
+
+  /**
+   * 危险命令拦截：将 rm/Remove-Item 转换为移动到回收站，阻止极端破坏性操作
+   */
+  private async sanitizeCommand(command: string, sessionId: string): Promise<{ safe: boolean; rewritten?: string; reason?: string }> {
+    const trimmed = command.trim();
+    const isWin = await this.isWindowsSession(sessionId);
+
+    if (isWin) {
+      return this.sanitizeWindowsCommand(trimmed);
+    }
+    return this.sanitizeUnixCommand(trimmed);
+  }
+
+  /**
+   * Unix (Linux/macOS) 命令安全检查
+   */
+  private sanitizeUnixCommand(trimmed: string): { safe: boolean; rewritten?: string; reason?: string } {
+    // 绝对禁止的命令
+    const blocked = [
+      /^rm\s+(-[a-zA-Z]*\s+)*\/$/m,
+      /^rm\s+(-[a-zA-Z]*\s+)*\/\s*$/m,
+      /^rm\s+-[a-zA-Z]*r[a-zA-Z]*\s+\/\s*$/m,
+      /mkfs\./,
+      /^dd\s+.*of=\/dev\/[sh]d/m,
+      /^:\(\)\s*\{\s*:\|:\s*&\s*\}\s*;\s*:/,
+    ];
+    for (const pattern of blocked) {
+      if (pattern.test(trimmed)) {
+        return { safe: false, reason: 'BLOCKED: 极度危险的破坏性操作，已阻止执行' };
+      }
+    }
+
+    // rm 命令改写为移动到回收站
+    const rmMatch = trimmed.match(/^(sudo\s+)?rm\s+((?:-[a-zA-Z]+\s+)*)(.+)$/s);
+    if (rmMatch) {
+      const sudo = rmMatch[1] || '';
+      const targets = rmMatch[3].trim();
+      const trashDir = '~/.aicmd/.trash';
+      const ts = Date.now();
+      const firstTarget = targets.split(/\s+/)[0];
+      const rewritten = `${sudo}mkdir -p ${trashDir} && ${sudo}mv ${targets} ${trashDir}/_del_${ts}_$(basename ${firstTarget}) 2>/dev/null || ${sudo}mv ${targets} ${trashDir}/_del_${ts}`;
+      return { safe: true, rewritten };
+    }
+
+    return { safe: true };
+  }
+
+  /**
+   * Windows (PowerShell) 命令安全检查
+   */
+  private sanitizeWindowsCommand(trimmed: string): { safe: boolean; rewritten?: string; reason?: string } {
+    const lower = trimmed.toLowerCase();
+
+    // 绝对禁止的操作
+    const blocked = [
+      /format\s+[a-z]:/i,                            // format C:
+      /clear-disk/i,                                   // Clear-Disk
+      /remove-item\s+.*[a-z]:\\\s*$/i,               // Remove-Item C:\
+      /remove-item\s+.*-recurse.*[a-z]:\\\s*$/i,     // Remove-Item -Recurse C:\
+      /rd\s+\/s\s+[a-z]:\\\s*$/i,                    // rd /s C:\
+    ];
+    for (const pattern of blocked) {
+      if (pattern.test(trimmed)) {
+        return { safe: false, reason: 'BLOCKED: 极度危险的破坏性操作，已阻止执行' };
+      }
+    }
+
+    // Remove-Item / del / rd 改写为移动到回收站
+    const removePatterns = [
+      /^(Remove-Item|ri|del|rd)\s+(.+)$/i,
+    ];
+    for (const pattern of removePatterns) {
+      const match = trimmed.match(pattern);
+      if (match) {
+        const targets = match[2]
+          .replace(/-Recurse/gi, '')
+          .replace(/-Force/gi, '')
+          .replace(/-Confirm:\$false/gi, '')
+          .replace(/\/s/gi, '')
+          .replace(/\/q/gi, '')
+          .trim();
+        const trashDir = '$env:USERPROFILE\\.aicmd\\.trash';
+        const ts = Date.now();
+        const rewritten = `New-Item -ItemType Directory -Force -Path "${trashDir}" | Out-Null; Move-Item -Path ${targets} -Destination "${trashDir}\\_del_${ts}" -Force`;
+        return { safe: true, rewritten };
+      }
+    }
+
+    return { safe: true };
+  }
+
+  /**
    * 执行命令并捕获输出
    */
   private async executeCommand(command: string, sessionId: string, timeout: number): Promise<string> {
@@ -421,18 +525,28 @@ Set-Content -Path $env:TEMP\_ai_task.ps1 -Value @'
       return `错误: 会话 ${sessionId} 不存在`;
     }
 
+    // 安全检查：拦截/改写危险命令
+    const check = await this.sanitizeCommand(command, sessionId);
+    if (!check.safe) {
+      return check.reason!;
+    }
+    const actualCommand = check.rewritten || command;
+    if (check.rewritten) {
+      console.log(`[AIService] Safety: rewrote "${command}" -> "${actualCommand}"`);
+    }
+
     try {
       // 启动输出捕获
       const outputPromise = this.sshService.captureOutput(sessionId, timeout);
       // 写入命令
-      this.sshService.writeData(sessionId, command + '\n');
+      this.sshService.writeData(sessionId, actualCommand + '\n');
       // 等待输出
       const output = await outputPromise;
 
       // 清理输出：去除命令回显和空白
       const lines = output.split('\n');
       // 尝试去掉第一行的命令回显
-      if (lines.length > 0 && lines[0].trim().includes(command.trim().substring(0, 20))) {
+      if (lines.length > 0 && lines[0].trim().includes(actualCommand.trim().substring(0, 20))) {
         lines.shift();
       }
       const cleanOutput = lines.join('\n').trim();
