@@ -4,7 +4,7 @@
     :title="t('ai.settings')"
     :closeButton="{ text: t('common.cancel'), show: false }"
     :confirmButton="{ text: '', show: false }"
-    :style="{ maxWidth: '500px', width: '100%' }"
+    :dialogStyle="{ maxWidth: '500px', width: '100%' }"
     @onHidden="handleModalClose"
   >
     <form @submit.prevent="saveSettings" class="ai-settings-form">
@@ -82,7 +82,7 @@
 
       <!-- 操作按钮 -->
       <div class="d-flex justify-content-between">
-        <button 
+        <!-- <button 
           type="button" 
           class="btn btn-outline-info" 
           @click="testConnection" 
@@ -91,8 +91,8 @@
           <span v-if="testing" class="spinner-border spinner-border-sm me-1"></span>
           <i v-else class="bi bi-lightning me-1"></i>
           {{ testing ? t('ai.testing') : t('ai.testConnection') }}
-        </button>
-        <div>
+        </button> -->
+        <div class="ms-auto">
           <button type="button" class="btn btn-secondary me-2" @click="close">{{ t('common.cancel') }}</button>
           <button type="submit" class="btn btn-primary" :disabled="saving">
             <span v-if="saving" class="spinner-border spinner-border-sm me-1"></span>

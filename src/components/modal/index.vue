@@ -1,6 +1,6 @@
 <template>
     <div class="modal fade" :id="modalId" ref="modalContainer" tabindex="-1" aria-labelledby="modalLabel">
-        <div class="modal-dialog modal-dialog-centered" :class="{'modal-fullscreen': isFullScreen}">
+        <div class="modal-dialog modal-dialog-centered" :class="{'modal-fullscreen': isFullScreen}" :style="dialogStyle">
             <div class="modal-content" :class="contentClass">
                 <div class="modal-header" :class="headerClass">
                     <h5 class="modal-title d-flex align-items-center" id="modalLabel">
@@ -53,6 +53,7 @@ const props = defineProps({
     loadingMessage: { type: String, default: '' },
     visible: { type: Boolean, default: false },
     isFullScreen: { type: Boolean, default: false },
+    dialogStyle: { type: Object, default: () => ({}) },
 });
 
 const dynamicOptions = ref<any>({});

@@ -161,14 +161,17 @@ export class SSHService {
         // 优先使用 node-pty（支持真正的 PTY，有回显、提示符、颜色等）
         if (nodePty) {
           try {
-            const ptyProcess = nodePty.spawn(shell, [], {
-              name: 'xterm-256color',
-              cols,
-              rows,
-              cwd: homeDir,
-              env: cleanEnv,
-              useBinary: true, // 启用二进制模式，保留 ZMODEM 等协议数据
-            });
+            const isWindows = process.platform === 'win32';
+            const ptyProcess = nodePty.spawn(shell, 
+              isWindows && shell.includes('powershell') ? ['-NoLogo'] : [],
+              {
+                name: isWindows ? 'xterm' : 'xterm-256color',
+                cols,
+                rows,
+                cwd: homeDir,
+                env: cleanEnv,
+                useBinary: !isWindows, // Windows 不支持二进制模式
+              });
 
             const session: TerminalSession = {
               id: sessionId,
@@ -284,7 +287,17 @@ export class SSHService {
    */
   private getDefaultShell(): string {
     if (process.platform === 'win32') {
-      return process.env.COMSPEC || 'cmd.exe';
+      // 优先 PowerShell，降级到 cmd
+      const pwsh = process.env.PWSH || process.env.PSModulePath;
+      if (pwsh) {
+        try {
+          execSync('pwsh --version', { encoding: 'utf-8', timeout: 2000 });
+          return 'pwsh.exe'; // PowerShell 7+
+        } catch {
+          // fall through
+        }
+      }
+      return 'powershell.exe'; // Windows PowerShell 5.x
     }
     return process.env.SHELL || '/bin/sh';
   }
@@ -618,6 +631,64 @@ export class SSHService {
    * 采集本地系统环境信息（仅用于 local session）
    */
   private collectLocalSystemInfo(): string {
+    if (process.platform === 'win32') {
+      return this.collectWindowsSystemInfo();
+    }
+    return this.collectUnixSystemInfo();
+  }
+
+  /**
+   * 采集 Windows 系统环境信息（PowerShell）
+   */
+  private collectWindowsSystemInfo(): string {
+    const psScript = `
+$os = (Get-CimInstance Win32_OperatingSystem).Caption
+$kernel = [System.Environment]::OSVersion.Version.ToString()
+$hostname = $env:COMPUTERNAME
+$arch = $env:PROCESSOR_ARCHITECTURE
+$user = $env:USERNAME
+$cpu = (Get-CimInstance Win32_Processor | Select-Object -First 1).Name
+$cpuCores = (Get-CimInstance Win32_Processor | Measure-Object -Property NumberOfLogicalProcessors -Sum).Sum
+$memBytes = (Get-CimInstance Win32_ComputerSystem).TotalPhysicalMemory
+$memGB = [math]::Round($memBytes / 1GB, 1)
+$nodeVer = try { & node --version 2>$null } catch { 'none' }
+$pyVer = try { & python --version 2>$null } catch { try { & python3 --version 2>$null } catch { 'none' } }
+$dockerVer = try { & docker --version 2>$null } catch { 'none' }
+Write-Output "__OS__: $os"
+Write-Output "__KERNEL__: $kernel"
+Write-Output "__HOSTNAME__: $hostname"
+Write-Output "__SHELL__: PowerShell"
+Write-Output "__ARCH__: $arch"
+Write-Output "__USER__: $user"
+Write-Output "__CPU__: $cpu ($cpuCores cores)"
+Write-Output "__MEM__: \${memGB}GB"
+Write-Output "__NODE__: $nodeVer"
+Write-Output "__PYTHON__: $pyVer"
+Write-Output "__DOCKER__: $dockerVer"
+`.trim();
+
+    try {
+      const result = execSync(
+        `powershell.exe -NoProfile -NonInteractive -Command "${psScript.replace(/"/g, '\\"').replace(/\n/g, '; ')}"`,
+        { encoding: 'utf-8', timeout: 10000 }
+      );
+      return this.formatSystemInfo(result);
+    } catch {
+      try {
+        const basic = execSync('systeminfo | findstr /B /C:"OS Name" /C:"OS Version" /C:"System Type"', {
+          encoding: 'utf-8', timeout: 15000,
+        });
+        return `Basic system info:\n${basic}`;
+      } catch {
+        return 'Unable to collect system info';
+      }
+    }
+  }
+
+  /**
+   * 采集 Unix/macOS/Linux 系统环境信息（Bash）
+   */
+  private collectUnixSystemInfo(): string {
     const commands = [
       'echo "__OS__: $(uname -s 2>/dev/null || echo unknown)"',
       'echo "__KERNEL__: $(uname -r 2>/dev/null || echo unknown)"',
@@ -636,7 +707,7 @@ export class SSHService {
     ].join('\n');
 
     try {
-      const result = execSync(commands, { encoding: 'utf-8', timeout: 5000, shell: '/bin/bash' });
+      const result = execSync(commands, { encoding: 'utf-8', timeout: 5000, shell: process.platform === 'win32' ? undefined : '/bin/bash' });
       return this.formatSystemInfo(result);
     } catch {
       try {

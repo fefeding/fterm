@@ -72,6 +72,7 @@
               :active="tab.id === store.activeTabId"
               @status-change="(s, sid) => handleStatusChange(tab.id, s, sid)"
               @zmodem-detected="(info: any) => handleZmodemDetected(tab.id, info)"
+              @open-ai-settings="openAISettings"
             />
           </div>
         </template>

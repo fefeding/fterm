@@ -1,6 +1,6 @@
 {
-  "name": "@fefeding/fterm",
-  "version": "0.1.4",
+  "name": "@fefeding/aicmd",
+  "version": "0.1.1",
   "private": false,
   "type": "commonjs",
   "description": "Web SSH 远程终端工具 - 支持 rz/sz 文件传输",
@@ -14,7 +14,8 @@
     "public/",
     "view/",
     "dist/",
-    "scripts/",
+    "data/skills",
+    "patches",
     "server.js",
     "package.json",
     "README.md"

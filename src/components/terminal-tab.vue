@@ -23,6 +23,7 @@
         :getTerminalContext="getTerminalContext"
         @close="showAIChat = false"
         @ws-send="handleAISend"
+        @open-settings="$emit('open-ai-settings')"
       />
     </div>
 
@@ -70,6 +71,7 @@ const props = defineProps<{
 const emit = defineEmits<{
   (e: 'status-change', status: 'connecting' | 'connected' | 'disconnected' | 'error' | 'reconnecting', sessionId?: string): void;
   (e: 'zmodem-detected', detection: any): void;
+  (e: 'open-ai-settings'): void;
 }>();
 
 const terminalWrapper = ref<HTMLElement>();

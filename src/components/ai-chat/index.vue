@@ -7,6 +7,9 @@
         <span class="fw-bold">{{ t('ai.chat') }}</span>
       </div>
       <div class="d-flex gap-1">
+        <button class="btn-ai-action" @click="handleOpenSettings" :title="t('ai.settings')">
+          <i class="bi bi-gear"></i>
+        </button>
         <button class="btn-ai-action" @click="toggleHistoryPanel" :title="t('ai.history')" :class="{ active: showHistoryPanel }">
           <i class="bi bi-clock-history"></i>
         </button>
@@ -187,6 +190,7 @@ const props = defineProps<{
 const emit = defineEmits<{
   (e: 'close'): void;
   (e: 'ws-send', msg: any): void;
+  (e: 'open-settings'): void;
 }>();
 
 // Skill 接口
@@ -562,6 +566,10 @@ function formatTime(ts: number): string {
 
 function handleClose() {
   emit('close');
+}
+
+function handleOpenSettings() {
+  emit('open-settings');
 }
 
 function toggleStep(step: AgentStep) {
