@@ -3,7 +3,7 @@
     <!-- 顶部工具栏 -->
     <div class="d-flex align-items-center justify-content-between p-2 border-bottom" style="border-color: var(--border-color) !important;">
       <span class="fw-bold" style="color: var(--accent);">
-        <i class="bi bi-terminal me-1"></i>fterm
+        <i class="bi bi-terminal me-1"></i>aicmd
       </span>
       <div class="d-flex gap-1">
         <button class="btn-toolbar" @click="$emit('add-connection')" :title="t('app.addConnection')">

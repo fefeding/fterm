@@ -2,7 +2,7 @@ import { createI18n } from 'vue-i18n';
 import zhCN from '@/locales/zh-CN';
 import enUS from '@/locales/en-US';
 
-const savedLocale = localStorage.getItem('fterm-locale') || 'en-US';
+const savedLocale = localStorage.getItem('aicmd-locale') || 'en-US';
 
 const i18n = createI18n({
   locale: savedLocale,
@@ -16,7 +16,7 @@ const i18n = createI18n({
 
 export function setLocale(locale: 'zh-CN' | 'en-US') {
   i18n.global.locale.value = locale as any;
-  localStorage.setItem('fterm-locale', locale);
+  localStorage.setItem('aicmd-locale', locale);
 }
 
 export function getLocale() {

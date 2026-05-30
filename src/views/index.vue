@@ -1,5 +1,5 @@
 <template>
-  <div class="fterm-layout">
+  <div class="aicmd-layout">
     <!-- 侧边栏 -->
     <TerminalSidebar
       :connections="store.connections"
@@ -429,7 +429,7 @@ async function restoreOrCreateTabs() {
 </script>
 
 <style scoped>
-.fterm-layout {
+.aicmd-layout {
   display: flex;
   width: 100%;
   height: 100vh;

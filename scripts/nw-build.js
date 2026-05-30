@@ -22,9 +22,9 @@ function getAppConfig(platform) {
     config.LSApplicationCategoryType = 'public.app-category.productivity';
     config.NSHumanReadableCopyright = 'Copyright © 2025';
     config.NSLocalNetworkUsageDescription = '需要网络访问以进行 SSH 连接';
-    config.CFBundleIdentifier = 'com.fterm.app';
-    config.CFBundleName = 'fterm';
-    config.CFBundleDisplayName = 'fterm 远程终端';
+    config.CFBundleIdentifier = 'com.aicmd.app';
+    config.CFBundleName = 'aicmd';
+    config.CFBundleDisplayName = 'AICmd Terminal';
     config.CFBundleShortVersionString = '0.1.0';
     config.CFBundleVersion = '0.1.0';
   }
@@ -45,7 +45,7 @@ function getNwVersion() {
 }
 
 async function buildPlatform(platform) {
-  const outDir = resolve(projectRoot, `release/fterm-${platform}`);
+  const outDir = resolve(projectRoot, `release/aicmd-${platform}`);
   console.log(`\n========================================`);
   console.log(`构建 ${platform} 平台...`);
   console.log(`========================================`);
@@ -80,7 +80,7 @@ async function buildPlatform(platform) {
 
 async function build() {
   try {
-    console.log('构建 fterm NW.js 应用...\n');
+    console.log('Building aicmd NW.js app...\n');
 
     const { execSync } = require('child_process');
 

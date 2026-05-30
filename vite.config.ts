@@ -27,7 +27,7 @@ const aiService = new AIService(sshService, skillService);
 
 const defaultInitState = {
     "config": {"prefix": urlPrefix, "apiUrl": process.env.API_URL||""},
-    "title": process.env.TITLE || 'fterm远程终端'
+    "title": process.env.TITLE || 'aicmd Terminal'
 };
 
 const nunjucksPlugin = ViteNunjucksPlugin({

@@ -22,8 +22,8 @@ export default {
     copySuffix: '副本',
   },
   app: {
-    title: 'fterm 远程终端',
-    emptyTitle: 'fterm 远程终端',
+    title: 'AICmd 终端',
+    emptyTitle: 'AICmd 终端',
     emptyDesc: '从左侧选择连接，或创建新的 SSH 连接开始',
     addConnection: '新增连接',
     openLocalShell: '打开本地 Shell',

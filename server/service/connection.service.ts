@@ -12,12 +12,12 @@ export class ConnectionService {
 
   /**
    * 连接配置文件路径
-   * 优先使用环境变量 fterm_DATA_DIR，否则使用用户主目录下的 .fterm 目录
+   * 优先使用环境变量 AICMD_DATA_DIR，否则使用用户主目录下的 .aicmd 目录
    */
   private readonly configPath: string;
 
   constructor() {
-    const dataDir = process.env.fterm_DATA_DIR || path.join(os.homedir(), '.fterm');
+    const dataDir = process.env.AICMD_DATA_DIR || path.join(os.homedir(), '.aicmd');
     this.configPath = path.join(dataDir, 'connections.json');
   }
 

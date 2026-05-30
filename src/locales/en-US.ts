@@ -22,8 +22,8 @@ export default {
     copySuffix: 'Copy',
   },
   app: {
-    title: 'fterm Remote Terminal',
-    emptyTitle: 'fterm Remote Terminal',
+    title: 'AICmd Terminal',
+    emptyTitle: 'AICmd Terminal',
     emptyDesc: 'Select a connection from the left, or create a new SSH connection to start',
     addConnection: 'New Connection',
     openLocalShell: 'Open Local Shell',

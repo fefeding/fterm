@@ -9,11 +9,11 @@ const os = require('os');
 const projectRoot = path.resolve(__dirname, '..');
 
 function getPidFilePath() {
-  const dataDir = process.env.fterm_DATA_DIR || path.join(os.homedir(), '.fterm');
+  const dataDir = process.env.AICMD_DATA_DIR || path.join(os.homedir(), '.aicmd');
   if (!fs.existsSync(dataDir)) {
     fs.mkdirSync(dataDir, { recursive: true });
   }
-  return path.join(dataDir, 'fterm.server.pid');
+  return path.join(dataDir, 'aicmd.server.pid');
 }
 
 function readPid() {
@@ -64,11 +64,11 @@ async function findAvailablePort(startPort) {
     if (await isPortAvailable(port)) return port;
     port++;
   }
-  throw new Error(`无法找到可用端口，已尝试 100 次`);
+  throw new Error(`Cannot find available port, tried 100 times`);
 }
 
 async function startProject() {
-  console.log('Starting fterm...');
+  console.log('Starting aicmd...');
 
   const pid = readPid();
   if (pid) {
@@ -113,11 +113,11 @@ async function startProject() {
   writePid(child.pid);
 
   console.log('Server started with PID:', child.pid);
-  console.log(`fterm is running at http://localhost:${port}`);
+  console.log(`aicmd is running at http://localhost:${port}`);
 }
 
 function stopProject() {
-  console.log('Stopping fterm...');
+  console.log('Stopping aicmd...');
   const pid = readPid();
   if (!pid) {
     console.log('No server process found');
@@ -151,12 +151,12 @@ function showVersion() {
 }
 
 function showHelp() {
-  console.log('fterm - Web SSH Terminal');
+  console.log('aicmd - AI-powered SSH Terminal');
   console.log('');
   console.log('Usage:');
-  console.log('  fterm start    Start the server');
-  console.log('  fterm stop     Stop the server');
-  console.log('  fterm restart  Restart the server');
-  console.log('  fterm -v       Show version');
+  console.log('  aicmd start    Start the server');
+  console.log('  aicmd stop     Stop the server');
+  console.log('  aicmd restart  Restart the server');
+  console.log('  aicmd -v       Show version');
   console.log('');
 }

@@ -19,7 +19,7 @@ export interface Skill {
  * 
  * Skills 存储位置：
  * - 系统内置：<project>/data/skills/*.md
- * - 用户自定义：~/.fterm/skills/*.md
+ * - 用户自定义：~/.aicmd/skills/*.md
  */
 export class SkillService {
   private skills: Map<string, Skill> = new Map();
@@ -29,8 +29,8 @@ export class SkillService {
   constructor(systemSkillsDir?: string) {
     // 系统 Skills 目录：项目根目录下的 data/skills
     this.systemSkillsDir = systemSkillsDir || path.join(process.cwd(), 'data', 'skills');
-    // 用户 Skills 目录：~/.fterm/skills
-    const dataDir = process.env.fterm_DATA_DIR || path.join(os.homedir(), '.fterm');
+    // 用户 Skills 目录：~/.aicmd/skills
+    const dataDir = process.env.AICMD_DATA_DIR || path.join(os.homedir(), '.aicmd');
     this.userSkillsDir = path.join(dataDir, 'skills');
     this.loadSkills();
   }

@@ -1,6 +1,6 @@
 /**
  * 连接配置实体
- * 实际数据保存在本地 JSON 文件中（~/.fterm/connections.json）
+ * 实际数据保存在本地 JSON 文件中（~/.aicmd/connections.json）
  */
 export class ConnectionEntity {
   /** 连接 ID */

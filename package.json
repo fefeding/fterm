@@ -3,7 +3,7 @@
   "version": "0.1.1",
   "private": false,
   "type": "commonjs",
-  "description": "Web SSH 远程终端工具 - 支持 rz/sz 文件传输",
+  "description": "AI-powered web SSH terminal with autonomous agent, skills, and file transfer",
   "repository": {
     "type": "git",
     "url": "https://cnb.cool/yc_null/fshell"
@@ -22,7 +22,7 @@
   ],
   "icon": "public/favicon.ico",
   "window": {
-    "title": "fTerm - 远程终端",
+    "title": "AICmd - AI Terminal",
     "width": 1200,
     "height": 800,
     "min_width": 800,
@@ -33,9 +33,9 @@
     "icon": "public/favicon.ico"
   },
   "scripts": {
-    "start": "pm2 start server.js --name fterm-server --disable-logs --",
-    "restart": "pm2 restart fterm-server --disable-logs --",
-    "stop": "pm2 stop fterm-server --",
+    "start": "pm2 start server.js --name aicmd-server --disable-logs --",
+    "restart": "pm2 restart aicmd-server --disable-logs --",
+    "stop": "pm2 stop aicmd-server --",
     "dev": "vite",
     "build": "npm run build-only",
     "preview": "vite preview",
@@ -105,7 +105,7 @@
     "zmodem.js": "^0.1.10"
   },
   "bin": {
-    "fterm": "bin/fterm.js"
+    "aicmd": "bin/aicmd.js"
   },
   "pnpm": {
     "onlyBuiltDependencies": [

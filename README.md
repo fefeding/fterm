@@ -1,160 +1,214 @@
-# fTerm
+# AICmd
 
-A web-based SSH remote terminal tool with support for rz/sz file transfer.
+An AI-powered web SSH terminal that combines a full-featured terminal emulator with an autonomous AI agent. The AI understands your system environment, executes commands, analyzes logs, manages services — all through natural language conversation.
 
 ## Features
 
-- **Web SSH Terminal**: High-performance terminal experience based on xterm.js
-- **Local Shell Support**: Native local shell access via node-pty
-- **File Transfer**: Supports rz/sz (ZMODEM) file upload and download
-- **Multi-Session Management**: Manage multiple SSH/local shell sessions simultaneously
-- **Connection Management**: Visual connection configuration management (CRUD)
-- **Desktop App**: Packaged as a cross-platform desktop client via NW.js
+### AI Agent
+- **Autonomous Operation**: AI agent directly executes commands in the terminal via tool calling (OpenAI function calling protocol). It observes output, makes decisions, and iterates until the task is done.
+- **System Awareness**: Automatically detects OS, CPU, memory, disk, installed services, and available languages on first connection. The AI always knows what system it's working with.
+- **Script Generation**: For complex multi-step tasks, the agent generates and executes scripts (Bash/Python/PowerShell) instead of running commands one by one.
+- **Cross-Platform Intelligence**: Adapts commands based on target OS — uses `systemctl` on Linux, `launchctl` on macOS, `Get-Service` on Windows.
+
+### Skills System
+- **Built-in Skills**: Pre-configured operational playbooks for common tasks:
+  - Server Health Check — comprehensive system metrics collection
+  - Log Analysis — error pattern detection with Python/awk scripts
+  - Docker Management — container lifecycle operations
+- **Custom Skills**: Create your own skills as markdown files in `~/.aicmd/skills/`. Skills define domain-specific SOPs, project-specific knowledge, or any workflow the LLM doesn't already know.
+- **Slash Commands**: Trigger skills with `/skill-name` in the chat input.
+
+### Terminal
+- **SSH Remote Terminal**: Full SSH client based on xterm.js + ssh2 with 256-color support.
+- **Local Shell**: Native local shell via node-pty (Bash/Zsh on macOS/Linux, PowerShell on Windows).
+- **File Transfer**: rz/sz (ZMODEM) file upload and download with automatic binary handling.
+- **Multi-Session**: Tab-based multi-session management with persistent state across restarts.
+- **Auto-Reconnect**: One-click reconnection for dropped SSH sessions.
+- **Session Persistence**: All sessions and chat history are persisted on the server side.
+
+### General
+- **Connection Management**: Visual SSH connection configuration (CRUD) with key-based and password auth.
+- **i18n**: Chinese / English UI with runtime language switching.
+- **Desktop App**: Cross-platform desktop client via NW.js.
+- **Chat History**: Persistent AI conversation history with browsing and restoration across sessions.
 
 ## Screenshot
 
-![fterm Screenshot](./screenshot.png)
+![AICmd Screenshot](./screenshot.png)
 
 ## Tech Stack
 
-- **Frontend**: Vue 3 + TypeScript + Vite + Bootstrap 5 + xterm.js
-- **Backend**: Node.js + Express + WebSocket (ws)
-- **SSH/PTY**: ssh2 + node-pty
-- **Build Tools**: Vite + TypeScript + nw-builder
+| Layer | Technology |
+|-------|-----------|
+| Frontend | Vue 3 + TypeScript + Vite + Bootstrap 5 + xterm.js |
+| Backend | Node.js + Express + WebSocket (ws) |
+| SSH/PTY | ssh2 + node-pty |
+| AI | OpenAI-compatible API (supports any compatible endpoint) |
+| Build | Vite + TypeScript + nw-builder |
 
 ## Quick Start
 
 ### Install
 
 ```bash
-npm install -g @fefeding/fterm
+npm install -g @fefeding/aicmd
 # or
-pnpm add -g @fefeding/fterm
+pnpm add -g @fefeding/aicmd
 ```
 
 ### Requirements
 
 - Node.js >= 18
-- pnpm
 
-### Install Dependencies
+### Start Server
 
 ```bash
+# Start (default port 9802, auto-finds available port)
+aicmd start
+
+# Custom port
+aicmd start --port 3000
+
+# Stop / Restart
+aicmd stop
+aicmd restart
+
+# Version
+aicmd -v
+```
+
+Then open http://localhost:9802 in your browser.
+
+### Configure AI
+
+1. Click the robot icon (bottom-left sidebar) or the gear icon in the AI chat header.
+2. Enter your API Key and base URL (supports OpenAI, DeepSeek, Qwen, or any compatible API).
+3. Choose a model (default: `gpt-4o-mini`).
+4. Save and start chatting.
+
+### Development
+
+```bash
+# Clone and install
+git clone <repo-url>
 pnpm install
-```
 
-### Development Mode
-
-```bash
+# Dev mode (with hot reload)
 pnpm dev
-```
+# Visit http://localhost:9801
 
-Visit http://localhost:9801 after starting.
+# Build
+pnpm build          # Frontend + server
+pnpm build-server   # Server only
 
-### Build
-
-```bash
-# Build frontend + backend
-pnpm build
-
-# Build frontend only
-pnpm run build-only
-```
-
-### Start Production Server
-
-After global installation, use the `fterm` CLI command:
-
-```bash
-# Start the server (default port 9802)
-sudo fterm start
-
-# Stop the server
-fterm stop
-
-# Restart the server
-fterm restart
-
-# Show version
-fterm -v
-```
-
-You can also start directly with Node.js:
-
-```bash
-node server.js
-```
-
-Or use npm scripts in the project directory:
-
-```bash
-# Start the server
-npm start
-
-# Stop the server
-npm stop
-
-# Restart the server
-npm restart
-```
-
-Default port is 9802. You can specify a custom port via `--port` or the `PORT` environment variable:
-
-```bash
+# Start production
 node server.js --port 3000
 ```
 
 ### Desktop App (NW.js)
 
 ```bash
-# Development mode
-pnpm nw:dev
-
-# Build for all platforms
+pnpm nw:dev          # Dev mode
 pnpm nw:build        # Current platform
 pnpm nw:build:win    # Windows
 pnpm nw:build:osx    # macOS
 pnpm nw:build:linux  # Linux
 ```
 
+## AI Usage Examples
+
+### Natural Language Operations
+```
+You: Check if nginx is running and show recent error logs
+AI: [executes systemctl status nginx, then reads error logs, provides analysis]
+
+You: Find the top 5 processes consuming memory
+AI: [generates and runs a ps/sort script, presents results as a table]
+
+You: Clean up Docker images older than 7 days
+AI: [runs docker system prune with filters, reports freed space]
+```
+
+### Using Skills
+```
+You: /server-health-check
+AI: [generates a comprehensive health check script, executes it, analyzes all metrics]
+
+You: /log-analyze /var/log/nginx/error.log
+AI: [creates a Python analysis script, shows error distribution and patterns]
+```
+
+### Custom Skills
+
+Create `~/.aicmd/skills/my-deploy.md`:
+```markdown
+---
+name: Deploy My App
+description: Deploy the production application with zero-downtime
+tags: [deploy, ops]
+---
+
+Steps to deploy:
+1. Pull latest code from git
+2. Run database migrations
+3. Build assets
+4. Restart with PM2 (graceful reload)
+...
+```
+
+Then trigger with `/deploy-my-app` in the chat.
+
 ## Project Structure
 
 ```
 .
-├── bin/              # CLI entry
+├── bin/              # CLI entry (aicmd command)
+├── data/skills/      # Built-in AI skills
 ├── dist/             # Build output
 ├── public/           # Static assets
-├── scripts/          # Build scripts
-├── server/           # Server-side source (TypeScript)
+├── scripts/          # Build scripts (NW.js)
+├── server/           # Server source (TypeScript)
 │   ├── model/        # Entity definitions
-│   ├── service/      # Business logic
-│   └── index.ts      # Server entry point
-├── src/              # Frontend source
-│   ├── adapter/      # Data adapter layer
-│   ├── base/         # Base modules
+│   ├── service/      # Business logic (AI, SSH, Skills)
+│   └── index.ts      # Server entry
+├── src/              # Frontend source (Vue 3)
 │   ├── components/   # Vue components
-│   ├── platform/     # Platform entry
-│   ├── service/      # Frontend services
+│   │   ├── ai-chat/  # AI chat panel
+│   │   ├── ai-settings/ # AI config modal
+│   │   └── ...       # Terminal, sidebar, etc.
+│   ├── locales/      # i18n translations
+│   ├── service/      # Frontend API services
 │   ├── stores/       # Pinia state management
-│   ├── utils/        # Utility functions
 │   └── views/        # Page views
 ├── view/             # HTML templates
-└── server.js         # Production startup script
+└── server.js         # Production startup
 ```
 
-## Development Notes
+## Data Storage
 
-### Server-Side Development
+All data is stored locally on the server:
 
-Server code is located in the `server/` directory, written in TypeScript. In development mode, Vite directly references the source code, so no manual compilation is needed.
+| Data | Path |
+|------|------|
+| Connections | `~/.aicmd/connections.json` |
+| Sessions | `~/.aicmd/sessions.json` |
+| AI Config | `~/.aicmd/ai-config.json` |
+| Chat History | `~/.aicmd/ai-history/` |
+| User Skills | `~/.aicmd/skills/*.md` |
 
-### Frontend Development
+Use `AICMD_DATA_DIR` environment variable to override the data directory.
 
-The frontend uses Vue 3 Composition API + Pinia for state management, with Bootstrap 5 as the UI framework.
+## Cross-Platform Support
 
-### Connection Configuration
+The terminal and AI agent work on:
 
-Connection information is persisted in local files on the server side.
+| Platform | Shell | AI Scripting |
+|----------|-------|-------------|
+| Linux | bash/zsh | Bash + Python + Node.js |
+| macOS | zsh/bash | Bash + Python + Node.js |
+| Windows | PowerShell 7+/5.x | PowerShell + Python + Node.js |
+
+The AI agent automatically detects the target OS and selects appropriate commands.
 
 ## License
 

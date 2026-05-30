@@ -11,7 +11,7 @@
  */
 const pkg = require('./package.json');
 process.env.NODE_ENV = 'production';
-process.title = process.env.SERVICE_NAME || pkg.name || 'fterm-server';
+process.title = process.env.SERVICE_NAME || pkg.name || 'aicmd-server';
 
 // 全局异常处理
 process.on('uncaughtException', (err) => {

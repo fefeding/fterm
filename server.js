@@ -309,10 +309,10 @@ for (let i = 0; i < process.argv.length; i++) {
 // 启动服务器
 const PORT = portFromArgs || process.env.PORT || 9802;
 server.listen(PORT, () => {
-  const pidFilePath = path.join(__dirname, 'fterm.server.pid');
+  const pidFilePath = path.join(__dirname, 'aicmd.server.pid');
   fs.writeFileSync(pidFilePath, process.pid.toString());
   console.log(`PID ${process.pid} written to ${pidFilePath}`);
-  console.log(`fterm Server is running on port ${PORT}`);
+  console.log(`aicmd Server is running on port ${PORT}`);
   console.log(`http://localhost:${PORT}`);
 });
 

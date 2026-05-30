@@ -233,7 +233,7 @@ Set-Content -Path $env:TEMP\_ai_task.ps1 -Value @'
 - 使用中文回复`;
 
   constructor(sshService?: ISSHService, skillService?: ISkillService) {
-    this.configDir = path.join(os.homedir(), '.fterm');
+    this.configDir = path.join(os.homedir(), '.aicmd');
     this.configPath = path.join(this.configDir, 'ai-config.json');
     this.historyDir = path.join(this.configDir, 'ai-history');
     this.config = this.getDefaultConfig();

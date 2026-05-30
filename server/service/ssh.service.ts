@@ -69,7 +69,7 @@ export class SSHService {
 
   constructor(connectionService: ConnectionService) {
     this.connectionService = connectionService;
-    const dataDir = process.env.fterm_DATA_DIR || path.join(os.homedir(), '.fterm');
+    const dataDir = process.env.AICMD_DATA_DIR || path.join(os.homedir(), '.aicmd');
     this.sessionsFilePath = path.join(dataDir, 'sessions.json');
     this.loadSessionsFromDisk();
   }
