@@ -1,6 +1,7 @@
 import * as fs from 'fs';
 import * as path from 'path';
 import * as os from 'os';
+import { getDataPath } from '../utils/data-dir';
 
 /**
  * Skill 定义接口
@@ -29,9 +30,8 @@ export class SkillService {
   constructor(systemSkillsDir?: string) {
     // 系统 Skills 目录：项目根目录下的 data/skills
     this.systemSkillsDir = systemSkillsDir || path.join(process.cwd(), 'data', 'skills');
-    // 用户 Skills 目录：~/.aicmd/skills
-    const dataDir = process.env.AICMD_DATA_DIR || path.join(os.homedir(), '.aicmd');
-    this.userSkillsDir = path.join(dataDir, 'skills');
+    // 用户 Skills 目录：统一通过 getDataPath 获取
+    this.userSkillsDir = getDataPath('skills');
     this.loadSkills();
   }
 

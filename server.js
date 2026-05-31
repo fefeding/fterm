@@ -6,8 +6,12 @@ const fs = require('fs');
 const http = require('http');
 const WebSocket = require('ws');
 
-// 日志文件路径
-const logFilePath = path.resolve(__dirname, 'server.log');
+// 统一数据目录管理（所有写入文件必须通过此模块获取路径）
+const { ensureDataDir, getDataPath } = require('./dist/server/utils/data-dir');
+const dataDir = ensureDataDir();
+
+// 日志文件路径（写入数据目录，非安装目录）
+const logFilePath = getDataPath('server.log');
 const logStream = fs.createWriteStream(logFilePath, { flags: 'a' });
 const originalLog = console.log;
 const originalError = console.error;
@@ -306,10 +310,8 @@ for (let i = 0; i < process.argv.length; i++) {
   }
 }
 
-// PID 文件路径
-const pidDir = process.env.AICMD_DATA_DIR || path.join(require('os').homedir(), '.aicmd');
-try { fs.mkdirSync(pidDir, { recursive: true }); } catch {}
-const pidFilePath = path.join(pidDir, 'aicmd.server.pid');
+// PID 文件路径（统一使用数据目录）
+const pidFilePath = getDataPath('aicmd.server.pid');
 
 // 进程退出时清理 PID 文件
 function cleanupPid() {

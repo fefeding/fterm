@@ -8,9 +8,22 @@ const os = require('os');
 
 const projectRoot = path.resolve(__dirname, '..');
 
-/**
- * 递归修复目录及所有文件权限：目录 755，文件 644
- */
+// ============================================================
+// 统一数据目录管理（与 server/utils/data-dir.ts 保持一致）
+// 所有写入文件必须通过 getDataPath() 获取路径
+// ============================================================
+
+/** 获取数据目录路径 */
+function getDataDir() {
+  return process.env.AICMD_DATA_DIR || path.join(os.homedir(), '.aicmd');
+}
+
+/** 获取数据目录下的文件路径 */
+function getDataPath(...segments) {
+  return path.join(getDataDir(), ...segments);
+}
+
+/** 递归修复权限：目录 755，文件 644 */
 function fixPermissions(dir) {
   try {
     fs.chmodSync(dir, 0o755);
@@ -18,77 +31,48 @@ function fixPermissions(dir) {
     for (const entry of entries) {
       const fullPath = path.join(dir, entry.name);
       try {
-        if (entry.isDirectory()) {
-          fixPermissions(fullPath);
-        } else {
-          fs.chmodSync(fullPath, 0o644);
-        }
+        if (entry.isDirectory()) fixPermissions(fullPath);
+        else fs.chmodSync(fullPath, 0o644);
       } catch { /* 单个文件失败不影响其他 */ }
     }
   } catch { /* ignore */ }
 }
 
+/** 确保数据目录存在且可写 */
 function ensureDataDir() {
-  const dataDir = process.env.AICMD_DATA_DIR || path.join(os.homedir(), '.aicmd');
+  const dir = getDataDir();
   try {
-    if (!fs.existsSync(dataDir)) {
-      fs.mkdirSync(dataDir, { recursive: true });
+    if (!fs.existsSync(dir)) {
+      fs.mkdirSync(dir, { recursive: true });
     } else {
-      // 确保整个数据目录可写，递归修复权限
-      try {
-        fs.accessSync(dataDir, fs.constants.W_OK);
-      } catch {
-        fixPermissions(dataDir);
-        // 再次检查
-        try { fs.accessSync(dataDir, fs.constants.W_OK); } catch {
-          throw new Error(`Permission denied even after chmod: ${dataDir}`);
+      try { fs.accessSync(dir, fs.constants.W_OK); } catch {
+        fixPermissions(dir);
+        try { fs.accessSync(dir, fs.constants.W_OK); } catch {
+          throw new Error(`Permission denied even after chmod: ${dir}`);
         }
       }
     }
   } catch (e) {
-    console.error(`Cannot access data directory ${dataDir}: ${e.message}`);
-    console.error('Try: sudo chown -R $(whoami) ' + dataDir);
+    console.error(`Cannot access data directory ${dir}: ${e.message}`);
+    console.error('Try: sudo chown -R $(whoami) ' + dir);
     process.exit(1);
   }
-  return dataDir;
+  return dir;
 }
 
-function getPidFilePath() {
-  const dataDir = ensureDataDir();
-  return path.join(dataDir, 'aicmd.server.pid');
-}
-
-function readPid() {
-  const pidFilePath = getPidFilePath();
-  if (fs.existsSync(pidFilePath)) {
-    return parseInt(fs.readFileSync(pidFilePath, 'utf8'));
-  }
-  return null;
-}
-
-function writePid(pid) {
-  const pidFilePath = getPidFilePath();
-  try {
-    fs.writeFileSync(pidFilePath, pid.toString());
-  } catch (e) {
-    // 尝试修复权限后重试
-    try { fs.chmodSync(pidFilePath, 0o644); } catch { /* ignore */ }
-    try {
-      fs.writeFileSync(pidFilePath, pid.toString());
-    } catch (e2) {
-      console.error(`Cannot write PID file ${pidFilePath}: ${e2.message}`);
-      console.error('Try: sudo chown -R $(whoami) ' + path.dirname(pidFilePath));
-      process.exit(1);
-    }
-  }
-}
-
-function deletePid() {
-  const pidFilePath = getPidFilePath();
-  if (fs.existsSync(pidFilePath)) {
-    fs.unlinkSync(pidFilePath);
-  }
-}
+// PID 文件操作
+const readPid = () => {
+  const f = getDataPath('aicmd.server.pid');
+  return fs.existsSync(f) ? parseInt(fs.readFileSync(f, 'utf8')) : null;
+};
+const writePid = (pid) => {
+  ensureDataDir();
+  fs.writeFileSync(getDataPath('aicmd.server.pid'), pid.toString());
+};
+const deletePid = () => {
+  const f = getDataPath('aicmd.server.pid');
+  if (fs.existsSync(f)) fs.unlinkSync(f);
+};
 
 const args = process.argv.slice(2);
 const command = args[0] || 'help';
@@ -151,7 +135,8 @@ async function startProject() {
     process.exit(1);
   }
 
-  const logFilePath = path.join(projectRoot, 'server.log');
+  ensureDataDir();
+  const logFilePath = getDataPath('server.log');
   let logFileFd;
   try {
     logFileFd = fs.openSync(logFilePath, 'a');

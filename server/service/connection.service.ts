@@ -3,6 +3,7 @@ import * as path from 'path';
 import * as os from 'os';
 import * as crypto from 'crypto';
 import { ConnectionEntity } from '../model/connection.entity';
+import { getDataPath } from '../utils/data-dir';
 
 /**
  * SSH 连接管理服务
@@ -17,8 +18,7 @@ export class ConnectionService {
   private readonly configPath: string;
 
   constructor() {
-    const dataDir = process.env.AICMD_DATA_DIR || path.join(os.homedir(), '.aicmd');
-    this.configPath = path.join(dataDir, 'connections.json');
+    this.configPath = getDataPath('connections.json');
   }
 
   /**

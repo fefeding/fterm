@@ -2,6 +2,7 @@ import * as fs from 'fs';
 import * as path from 'path';
 import * as os from 'os';
 import axios from 'axios';
+import { getDataDir, getDataPath, ensureDataDir } from '../utils/data-dir';
 
 /**
  * AI 配置接口
@@ -236,9 +237,9 @@ Set-Content -Path $env:TEMP\_ai_task.ps1 -Value @'
 - 使用中文回复`;
 
   constructor(sshService?: ISSHService, skillService?: ISkillService) {
-    this.configDir = path.join(os.homedir(), '.aicmd');
-    this.configPath = path.join(this.configDir, 'ai-config.json');
-    this.historyDir = path.join(this.configDir, 'ai-history');
+    this.configDir = getDataDir();
+    this.configPath = getDataPath('ai-config.json');
+    this.historyDir = getDataPath('ai-history');
     this.config = this.getDefaultConfig();
     this.sshService = sshService;
     this.skillService = skillService;

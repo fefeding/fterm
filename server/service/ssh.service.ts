@@ -6,6 +6,7 @@ import { execSync } from 'child_process';
 import * as os from 'os';
 import * as fs from 'fs';
 import * as path from 'path';
+import { getDataPath } from '../utils/data-dir';
 
 // 尝试加载 node-pty，如果可用则使用 PTY 模式
 let nodePty: any = null;
@@ -69,8 +70,7 @@ export class SSHService {
 
   constructor(connectionService: ConnectionService) {
     this.connectionService = connectionService;
-    const dataDir = process.env.AICMD_DATA_DIR || path.join(os.homedir(), '.aicmd');
-    this.sessionsFilePath = path.join(dataDir, 'sessions.json');
+    this.sessionsFilePath = getDataPath('sessions.json');
     this.loadSessionsFromDisk();
   }
 
